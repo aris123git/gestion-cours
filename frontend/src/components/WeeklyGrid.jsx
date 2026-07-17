@@ -22,13 +22,14 @@ export default function WeeklyGrid({ courses }) {
       {DAYS.map((day) => (
         <section
           key={day}
-          className="rounded-3xl bg-white/80 p-4 shadow-md shadow-brand-900/5 dark:bg-brand-800/50"
+          className="rounded-3xl border border-ist-100 bg-white p-4 shadow-md shadow-ist-900/5 dark:border-ist-700 dark:bg-ist-800/50"
         >
-          <h3 className="mb-3 font-display text-lg font-semibold text-brand-700 dark:text-brand-100">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-ist-600 dark:text-ist-100">
+            <span className="h-2 w-2 rounded-full bg-gold-400" />
             {day}
           </h3>
           {byDay[day].length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-brand-200 px-3 py-6 text-center text-sm text-brand-500 dark:border-brand-600 dark:text-brand-300">
+            <p className="rounded-2xl border border-dashed border-ist-200 px-3 py-6 text-center text-sm text-ist-400 dark:border-ist-600">
               Aucun cours
             </p>
           ) : (
@@ -44,20 +45,27 @@ export default function WeeklyGrid({ courses }) {
   )
 }
 
-/** Simple printable / PDF-friendly table */
-export function PrintableTable({ courses, student, weekLabel }) {
+export function PrintableTable({ courses, student, weekLabel, programme }) {
   return (
     <div className="hidden print:block">
-      <h1 style={{ fontSize: 18, marginBottom: 4 }}>GestionCours — Emploi du temps</h1>
+      <h1 style={{ fontSize: 18, marginBottom: 4 }}>IST Wayalghin — Emploi du temps</h1>
       <p style={{ marginBottom: 12, fontSize: 12 }}>
-        {student?.first_name} {student?.last_name} · {student?.filiere_name} ({student?.level}) ·{' '}
-        {weekLabel}
+        {student?.first_name} {student?.last_name} · {programme} · {weekLabel}
       </p>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
         <thead>
           <tr>
             {['Jour', 'Horaire', 'Matière', 'Enseignant', 'Salle', 'Groupe'].map((h) => (
-              <th key={h} style={{ border: '1px solid #ccc', padding: 6, textAlign: 'left' }}>
+              <th
+                key={h}
+                style={{
+                  border: '1px solid #003366',
+                  padding: 6,
+                  textAlign: 'left',
+                  background: '#003366',
+                  color: '#f5c518',
+                }}
+              >
                 {h}
               </th>
             ))}
@@ -70,7 +78,13 @@ export function PrintableTable({ courses, student, weekLabel }) {
               <td style={{ border: '1px solid #ccc', padding: 6 }}>
                 {formatTime(c.start_time)}–{formatTime(c.end_time)}
               </td>
-              <td style={{ border: '1px solid #ccc', padding: 6, borderLeft: `3px solid ${subjectColor(c.subject).border}` }}>
+              <td
+                style={{
+                  border: '1px solid #ccc',
+                  padding: 6,
+                  borderLeft: `3px solid ${subjectColor(c.subject).border}`,
+                }}
+              >
                 {c.subject}
               </td>
               <td style={{ border: '1px solid #ccc', padding: 6 }}>{c.teacher}</td>

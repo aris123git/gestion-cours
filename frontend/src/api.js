@@ -103,17 +103,17 @@ export const api = {
     request(`/notifications/${id}/read`, { method: 'POST', token }),
 }
 
-/** Stable pastel palette keyed by subject name */
+/** Subject colors — IST navy/gold family + distinct accents */
 export function subjectColor(subject) {
   const palette = [
-    { bg: '#dbeafe', border: '#3b82f6', text: '#1e3a8a' },
-    { bg: '#d1fae5', border: '#10b981', text: '#064e3b' },
-    { bg: '#fef3c7', border: '#f59e0b', text: '#78350f' },
-    { bg: '#fce7f3', border: '#ec4899', text: '#831843' },
-    { bg: '#e0e7ff', border: '#6366f1', text: '#312e81' },
-    { bg: '#ffedd5', border: '#f97316', text: '#7c2d12' },
-    { bg: '#ccfbf1', border: '#14b8a6', text: '#134e4a' },
-    { bg: '#ede9fe', border: '#8b5cf6', text: '#4c1d95' },
+    { bg: '#e4eef7', border: '#003366', text: '#003366' },
+    { bg: '#d9ecf8', border: '#0073bb', text: '#005f9a' },
+    { bg: '#fff4cc', border: '#d4a017', text: '#7a5a00' },
+    { bg: '#e8f5e9', border: '#2e7d32', text: '#1b5e20' },
+    { bg: '#fce8e6', border: '#c62828', text: '#8e0000' },
+    { bg: '#f3e5f5', border: '#6a1b9a', text: '#4a148c' },
+    { bg: '#e0f2f1', border: '#00695c', text: '#004d40' },
+    { bg: '#fff3e0', border: '#ef6c00', text: '#e65100' },
   ]
   let hash = 0
   const s = subject || '?'

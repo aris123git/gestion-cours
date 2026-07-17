@@ -2,19 +2,26 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* IST Wayalghin brand */
 @theme {
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", Georgia, serif;
-  --color-brand-50: #f0f5fb;
-  --color-brand-100: #dce8f6;
-  --color-brand-200: #b9d1ed;
-  --color-brand-300: #7eb6ff;
-  --color-brand-400: #4a90e2;
-  --color-brand-500: #2b6cb0;
-  --color-brand-600: #1e4d8c;
-  --color-brand-700: #163a6b;
-  --color-brand-800: #0f2a4d;
-  --color-brand-900: #0a1c33;
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ist-50: #f3f7fb;
+  --color-ist-100: #e4eef7;
+  --color-ist-200: #c5dbef;
+  --color-ist-300: #7eb6e0;
+  --color-ist-400: #0073bb;
+  --color-ist-500: #005f9a;
+  --color-ist-600: #003366;
+  --color-ist-700: #00264d;
+  --color-ist-800: #001a33;
+  --color-ist-900: #000f1f;
+
+  --color-gold-300: #f7d774;
+  --color-gold-400: #f5c518;
+  --color-gold-500: #d4a017;
+  --color-gold-600: #b8860b;
 }
 
 html {
@@ -25,15 +32,20 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  background: linear-gradient(165deg, #f0f5fb 0%, #e8f0fa 45%, #dce8f6 100%);
   min-height: 100dvh;
-  color: #0f2a4d;
+  color: #003366;
+  background:
+    radial-gradient(ellipse at 10% 0%, #e4eef7 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 20%, #fff8e0 0%, transparent 40%),
+    linear-gradient(180deg, #ffffff 0%, #f3f7fb 55%, #e4eef7 100%);
 }
 
 .dark body,
 html.dark body {
-  background: linear-gradient(165deg, #0a1c33 0%, #0f2a4d 50%, #163a6b 100%);
-  color: #e8f0fa;
+  color: #e4eef7;
+  background:
+    radial-gradient(ellipse at 20% 0%, #003366 0%, transparent 55%),
+    linear-gradient(180deg, #000f1f 0%, #001a33 50%, #00264d 100%);
 }
 
 @media print {
@@ -43,8 +55,5 @@ html.dark body {
   body {
     background: white !important;
     color: black !important;
-  }
-  .print-area {
-    box-shadow: none !important;
   }
 }
