@@ -1,15 +1,17 @@
 """Student-facing schedule and profile endpoints."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_student
 from app.db.session import get_db
 from app.models import Filiere, Notification, Schedule, Student
 from app.schemas import FiliereOut, NotificationOut, ScheduleOut, StudentOut
+from app.services.pdf_schedule import build_schedule_pdf
 
 router = APIRouter(tags=["Student"])
 
@@ -115,6 +117,52 @@ def get_schedule_week(
         .all()
     )
     return [_schedule_to_out(r) for r in rows]
+
+
+@router.get("/schedule/pdf")
+def download_schedule_pdf(
+    week: Optional[date] = Query(None, description="Any date in the target week"),
+    filiere_id: Optional[int] = Query(None),
+    current: Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Download the weekly timetable as a branded IST PDF."""
+    week_date = _monday_of(week or date.today())
+    target = filiere_id or current.filiere_id
+    filiere = db.query(Filiere).filter(Filiere.id == target).first()
+    if not filiere:
+        raise HTTPException(status_code=404, detail="Filière introuvable")
+
+    rows = (
+        db.query(Schedule)
+        .options(joinedload(Schedule.filiere))
+        .filter(Schedule.week_date == week_date, Schedule.filiere_id == target)
+        .order_by(Schedule.day, Schedule.start_time)
+        .all()
+    )
+
+    student = (
+        db.query(Student)
+        .options(joinedload(Student.filiere))
+        .filter(Student.id == current.id)
+        .first()
+    )
+    pdf_bytes = build_schedule_pdf(
+        student_name=f"{student.first_name} {student.last_name}",
+        student_number=student.student_number,
+        programme=filiere.name,
+        level=filiere.level,
+        week=week_date,
+        courses=rows,
+    )
+    filename = f"EDT_IST_{filiere.level}_{filiere.name}_{week_date.isoformat()}.pdf".replace(
+        " ", "_"
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/notifications", response_model=list[NotificationOut])

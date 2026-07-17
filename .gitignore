@@ -30,3 +30,6 @@ exports/
 dist/
 build/
 *.spec.bak
+
+# Local Netlify folder
+.netlify

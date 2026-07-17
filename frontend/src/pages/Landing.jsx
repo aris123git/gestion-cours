@@ -55,17 +55,17 @@ export default function Landing() {
 
           <div className="flex flex-wrap gap-3 pt-2">
             <Link
-              to="/login"
+              to="/register"
               className="rounded-2xl bg-gold-400 px-7 py-3.5 text-base font-bold text-ist-700 shadow-lg shadow-black/20 transition hover:-translate-y-0.5 hover:bg-gold-300"
+            >
+              Créer un compte
+            </Link>
+            <Link
+              to="/login"
+              className="rounded-2xl border border-white/40 bg-white/10 px-7 py-3.5 text-base font-semibold text-white backdrop-blur transition hover:bg-white/20"
             >
               Se connecter
             </Link>
-            <a
-              href="#comment"
-              className="rounded-2xl border border-white/40 bg-white/10 px-7 py-3.5 text-base font-semibold text-white backdrop-blur transition hover:bg-white/20"
-            >
-              Comment ça marche
-            </a>
           </div>
         </section>
       </main>
@@ -76,9 +76,9 @@ export default function Landing() {
         </h2>
         <ol className="grid gap-6 md:grid-cols-3">
           {[
-            { n: '1', t: 'Connexion', d: 'Entrez votre numéro d’étudiant et votre mot de passe.' },
-            { n: '2', t: 'Année & filière', d: 'Sélectionnez votre niveau (L1, L2…) et votre branche.' },
-            { n: '3', t: 'Emploi du temps', d: 'Consultez la semaine, imprimez ou téléchargez en PDF.' },
+            { n: '1', t: 'Créer un compte', d: 'Inscrivez-vous avec votre numéro d’étudiant, puis connectez-vous.' },
+            { n: '2', t: 'Année & filière', d: 'Choisissez votre niveau (L1, L2…) et votre branche.' },
+            { n: '3', t: 'Planning + PDF', d: 'Consultez la semaine et téléchargez l’emploi du temps en PDF.' },
           ].map((step) => (
             <li key={step.n} className="relative pl-14">
               <span className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-full bg-ist-600 font-display text-lg font-bold text-gold-400">

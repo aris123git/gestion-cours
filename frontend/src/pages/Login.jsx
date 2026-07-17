@@ -45,7 +45,11 @@ export default function Login() {
 
           <h1 className="text-xl font-semibold text-ist-700 dark:text-ist-50">Connexion</h1>
           <p className="mt-1 text-sm text-ist-500 dark:text-ist-300">
-            Numéro d&apos;étudiant et mot de passe
+            Connectez-vous avec votre numéro d&apos;étudiant. Pas encore de compte ?{' '}
+            <Link to="/register" className="font-semibold text-ist-600 underline dark:text-gold-400">
+              Créez-en un
+            </Link>
+            .
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -93,12 +97,16 @@ export default function Login() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-ist-400">
-            Démo : 20250001 / password123 ·{' '}
+          <p className="mt-6 text-center text-sm text-ist-500">
+            <Link to="/register" className="font-semibold text-gold-600 underline">
+              Créer un compte étudiant
+            </Link>
+            <span className="mx-2 text-ist-300">·</span>
             <Link to="/" className="underline">
               Accueil
             </Link>
           </p>
+          <p className="mt-2 text-center text-xs text-ist-400">Démo : 20250001 / password123</p>
         </div>
       </main>
       <Footer />

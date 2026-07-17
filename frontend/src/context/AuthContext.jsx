@@ -24,8 +24,7 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  async function login(studentNumber, password) {
-    const data = await api.login(studentNumber, password)
+  function persistSession(data) {
     setToken(data.access_token)
     setStudent(data.student)
     localStorage.setItem(
@@ -33,6 +32,16 @@ export function AuthProvider({ children }) {
       JSON.stringify({ token: data.access_token, student: data.student }),
     )
     return data
+  }
+
+  async function login(studentNumber, password) {
+    const data = await api.login(studentNumber, password)
+    return persistSession(data)
+  }
+
+  async function register(payload) {
+    const data = await api.register(payload)
+    return persistSession(data)
   }
 
   function logout() {
@@ -49,7 +58,9 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ token, student, loading, login, logout, refreshStudent }}>
+    <AuthContext.Provider
+      value={{ token, student, loading, login, register, logout, refreshStudent }}
+    >
       {children}
     </AuthContext.Provider>
   )

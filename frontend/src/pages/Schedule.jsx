@@ -22,6 +22,7 @@ export default function Schedule({ notificationsOpen, setNotificationsOpen }) {
   const [notifications, setNotifications] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (!token || !selection?.filiereId) return
@@ -101,6 +102,33 @@ export default function Schedule({ notificationsOpen, setNotificationsOpen }) {
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
     } catch {
       /* ignore */
+    }
+  }
+
+  async function downloadPdf() {
+    if (!token || !selection?.filiereId) return
+    setPdfBusy(true)
+    setError('')
+    try {
+      const blob = await api.downloadSchedulePdf(token, {
+        week,
+        filiereId: selection.filiereId,
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `EDT_IST_${selection.level}_${selection.filiereName}_${week}.pdf`.replace(
+        /\s+/g,
+        '_',
+      )
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err.message || 'Téléchargement PDF impossible')
+    } finally {
+      setPdfBusy(false)
     }
   }
 
@@ -185,10 +213,18 @@ export default function Schedule({ notificationsOpen, setNotificationsOpen }) {
         <div className="no-print mb-6 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => window.print()}
-            className="rounded-2xl bg-gold-400 px-4 py-2.5 text-sm font-bold text-ist-700 shadow-sm hover:bg-gold-300"
+            onClick={downloadPdf}
+            disabled={pdfBusy}
+            className="rounded-2xl bg-gold-400 px-4 py-2.5 text-sm font-bold text-ist-700 shadow-sm hover:bg-gold-300 disabled:opacity-60"
           >
-            Imprimer / PDF
+            {pdfBusy ? 'PDF…' : 'Télécharger le PDF'}
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-2xl border border-ist-300 bg-white px-4 py-2.5 text-sm font-semibold text-ist-600 dark:border-ist-600 dark:bg-ist-800 dark:text-ist-100"
+          >
+            Imprimer
           </button>
           <button
             type="button"

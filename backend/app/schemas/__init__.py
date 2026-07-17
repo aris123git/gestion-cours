@@ -13,6 +13,16 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1)
 
 
+class RegisterRequest(BaseModel):
+    student_number: str = Field(..., min_length=1, max_length=40)
+    first_name: str = Field(..., min_length=1, max_length=80)
+    last_name: str = Field(..., min_length=1, max_length=80)
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=128)
+    filiere_id: int
+    level: str = Field(..., min_length=1, max_length=40)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

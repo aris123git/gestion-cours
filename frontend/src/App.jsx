@@ -6,6 +6,7 @@ import { SelectionProvider } from './context/SelectionContext'
 import Navbar from './components/Navbar'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import SelectProgramme from './pages/SelectProgramme'
 import Schedule from './pages/Schedule'
 
@@ -27,6 +28,7 @@ function Shell() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route path="/select" element={<SelectProgramme />} />
         <Route
           path="/schedule"

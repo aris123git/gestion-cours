@@ -75,6 +75,13 @@ export const api = {
   login: (student_number, password) =>
     request('/login', { method: 'POST', body: { student_number, password } }),
 
+  register: (payload) => request('/register', { method: 'POST', body: payload }),
+
+  getPublicFilieres: (level) => {
+    const qs = level ? `?level=${encodeURIComponent(level)}` : ''
+    return request(`/public/filieres${qs}`)
+  },
+
   getStudent: (token) => request('/student', { token }),
 
   getSchedule: (token, params = {}) => {
@@ -89,6 +96,28 @@ export const api = {
   getScheduleWeek: (token, weekDate, filiereId) => {
     const qs = filiereId ? `?filiere_id=${filiereId}` : ''
     return request(`/schedule/week/${weekDate}${qs}`, { token })
+  },
+
+  /** Download timetable PDF (returns a Blob). */
+  downloadSchedulePdf: async (token, { week, filiereId } = {}) => {
+    const qs = new URLSearchParams()
+    if (week) qs.set('week', week)
+    if (filiereId) qs.set('filiere_id', filiereId)
+    const q = qs.toString()
+    const res = await fetch(`${API_BASE}/schedule/pdf${q ? `?${q}` : ''}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' },
+    })
+    if (!res.ok) {
+      let message = 'Téléchargement PDF impossible'
+      try {
+        const data = await res.json()
+        message = data?.detail || message
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message)
+    }
+    return res.blob()
   },
 
   getFilieres: (token, level) => {
