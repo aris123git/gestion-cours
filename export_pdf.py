@@ -132,26 +132,49 @@ def export_pour_filiere(filiere_id, date_lundi, output_path, logo_path=None):
     doc.build(elements)
     return True
 
-def export_all_filieres(date_lundi, annee_univ=ANNEE_COURANTE, logo_path=C:\Users\ARIS\Documents\GestionCours\fichiers\logoist.jpeg):
+def export_all_filieres(date_lundi, annee_univ=ANNEE_COURANTE, logo_path=None):
     from database import get_filieres
     filieres = get_filieres()
     if not filieres:
         return []
-    
+
+    if logo_path is None:
+        logo_path = os.path.join(os.path.dirname(__file__), "fichiers", "logoist.jpeg")
+        if not os.path.exists(logo_path):
+            logo_path = None
+
     # Dossier année (ex: exports/2025-2026)
     annee_dir = os.path.join(EXPORT_DIR, annee_univ)
-    
+
     # Dossier semaine (ex: exports/2025-2026/2025-05-12)
     semaine_dir = os.path.join(annee_dir, date_lundi)
     os.makedirs(semaine_dir, exist_ok=True)
-    
-    print(f"📁 Export dans : {semaine_dir}")
-    
+
+    print(f"Export dans : {semaine_dir}")
+
     resultats = []
     for f in filieres:
         pdf_name = f"{f.annee}_{f.nom}.pdf".replace(" ", "_")
         pdf_path = os.path.join(semaine_dir, pdf_name)
         ok = export_pour_filiere(f.id, date_lundi, pdf_path, logo_path)
-        resultats.append((f, ok))
-    
+        resultats.append((f, ok, pdf_path if ok else None))
+
     return resultats
+
+
+def export_une_filiere(filiere_id, date_lundi, annee_univ=ANNEE_COURANTE, logo_path=None):
+    if logo_path is None:
+        logo_path = os.path.join(os.path.dirname(__file__), "fichiers", "logoist.jpeg")
+        if not os.path.exists(logo_path):
+            logo_path = None
+
+    filiere = get_filiere_by_id(filiere_id)
+    if not filiere:
+        return None
+
+    semaine_dir = os.path.join(EXPORT_DIR, annee_univ, date_lundi)
+    os.makedirs(semaine_dir, exist_ok=True)
+    pdf_name = f"{filiere.annee}_{filiere.nom}.pdf".replace(" ", "_")
+    pdf_path = os.path.join(semaine_dir, pdf_name)
+    ok = export_pour_filiere(filiere_id, date_lundi, pdf_path, logo_path)
+    return pdf_path if ok else None

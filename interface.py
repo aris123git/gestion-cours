@@ -439,7 +439,7 @@ class PlanningApp:
         else:
             print(f"✅ Logo trouvé : {logo_path}")
         resultats = export_all_filieres(date_lundi, ANNEE_COURANTE, logo_path)
-        nb_ok = sum(1 for _, ok in resultats if ok)
+        nb_ok = sum(1 for item in resultats if item[1])
         messagebox.showinfo("Export", f"Export terminé : {nb_ok} PDF générés")
 
     def semaine_precedente(self):

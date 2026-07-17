@@ -321,3 +321,190 @@ def get_dernier_enseignant_filiere_matiere(filiere_id, matiere):
     r = c.fetchone()
     conn.close()
     return r[0] if r else ""
+
+
+def supprimer_cours(cours_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM cours WHERE id = ?", (cours_id,))
+    conn.commit()
+    conn.close()
+
+
+def modifier_salle(salle_id, nom, capacite):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute("UPDATE salles SET nom = ?, capacite = ? WHERE id = ?", (nom, capacite, salle_id))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
+def get_grille_filiere(filiere_id, date_lundi):
+    """Retourne la grille complète avec noms de salles pour une filière/semaine."""
+    from config import JOURS, CRENEAUX
+    grille = {}
+    for jour in JOURS:
+        for creneau, _, _ in CRENEAUX:
+            cours = get_cours(filiere_id, date_lundi, jour, creneau)
+            if cours:
+                salle_nom = None
+                if cours.salle_id:
+                    salle = get_salle_by_id(cours.salle_id)
+                    salle_nom = salle.nom if salle else None
+                grille[f"{jour}|{creneau}"] = {
+                    "id": cours.id,
+                    "matiere": cours.matiere,
+                    "enseignant": cours.enseignant,
+                    "salle_id": cours.salle_id,
+                    "salle_nom": salle_nom,
+                    "groupe_tc": cours.groupe_tc,
+                }
+            else:
+                grille[f"{jour}|{creneau}"] = None
+    return grille
+
+
+def get_filieres_avec_effectif(annee=None, etablissement=None, annee_univ=None):
+    from config import ANNEE_COURANTE
+    if annee_univ is None:
+        annee_univ = ANNEE_COURANTE
+    filieres = get_filieres(annee, etablissement)
+    result = []
+    for f in filieres:
+        result.append({
+            "id": f.id,
+            "annee": f.annee,
+            "nom": f.nom,
+            "effectif": get_effectif(annee_univ, f.id),
+        })
+    return result
+
+
+def get_stats_semaine(date_lundi, filiere_id=None):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    if filiere_id:
+        c.execute("SELECT COUNT(*) FROM cours WHERE date_lundi=? AND filiere_id=? AND matiere != ''",
+                  (date_lundi, filiere_id))
+        total = c.fetchone()[0]
+        c.execute("""SELECT COUNT(*) FROM cours
+                     WHERE date_lundi=? AND filiere_id=? AND salle_id IS NOT NULL AND matiere != ''""",
+                  (date_lundi, filiere_id))
+        avec_salle = c.fetchone()[0]
+        c.execute("""SELECT COUNT(DISTINCT groupe_tc) FROM cours
+                     WHERE date_lundi=? AND filiere_id=? AND groupe_tc IS NOT NULL""",
+                  (date_lundi, filiere_id))
+        tc = c.fetchone()[0]
+    else:
+        c.execute("SELECT COUNT(*) FROM cours WHERE date_lundi=? AND matiere != ''", (date_lundi,))
+        total = c.fetchone()[0]
+        c.execute("""SELECT COUNT(*) FROM cours
+                     WHERE date_lundi=? AND salle_id IS NOT NULL AND matiere != ''""", (date_lundi,))
+        avec_salle = c.fetchone()[0]
+        c.execute("""SELECT COUNT(DISTINCT groupe_tc) FROM cours
+                     WHERE date_lundi=? AND groupe_tc IS NOT NULL""", (date_lundi,))
+        tc = c.fetchone()[0]
+    conn.close()
+    return {"cours": total, "avec_salle": avec_salle, "tronc_commun": tc}
+
+
+def copier_semaine(filiere_id, date_source, date_cible):
+    """Copie les cours d'une semaine vers une autre pour une filière."""
+    source = get_tous_cours_semaine(date_source)
+    source = [c for c in source if c.filiere_id == filiere_id and c.matiere]
+    if not source:
+        return 0
+    supprimer_cours_filiere_semaine(filiere_id, date_cible)
+    count = 0
+    for c in source:
+        nouveau = Cours(
+            id=None,
+            filiere_id=filiere_id,
+            date_lundi=date_cible,
+            jour=c.jour,
+            creneau=c.creneau,
+            matiere=c.matiere,
+            enseignant=c.enseignant,
+            salle_id=None,
+            groupe_tc=None,
+        )
+        sauvegarder_cours(nouveau)
+        count += 1
+    return count
+
+
+def rechercher_conflits_enseignant(date_lundi, jour, creneau, enseignant, exclude_cours_id=None):
+    """Détecte si un enseignant est déjà pris sur ce créneau."""
+    if not enseignant:
+        return []
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    query = """
+        SELECT c.id, c.filiere_id, f.nom, f.annee, c.matiere
+        FROM cours c
+        JOIN filieres f ON f.id = c.filiere_id
+        WHERE c.date_lundi=? AND c.jour=? AND c.creneau=?
+          AND LOWER(c.enseignant)=LOWER(?) AND c.matiere != ''
+    """
+    params = [date_lundi, jour, creneau, enseignant]
+    if exclude_cours_id:
+        query += " AND c.id != ?"
+        params.append(exclude_cours_id)
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    return [{"cours_id": r[0], "filiere_id": r[1], "filiere": f"{r[3]} {r[2]}", "matiere": r[4]} for r in rows]
+
+
+def get_tous_enseignants():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT enseignant FROM enseignants_par_matiere ORDER BY enseignant")
+    rows = c.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_toutes_matieres():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT matiere FROM matieres_semaine ORDER BY matiere")
+    rows = c.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_etablissements():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, nom FROM etablissements ORDER BY nom")
+    rows = c.fetchall()
+    conn.close()
+    return [{"id": r[0], "nom": r[1]} for r in rows]
+
+
+def get_types_cours():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, nom FROM types_cours ORDER BY id")
+    rows = c.fetchall()
+    conn.close()
+    return [{"id": r[0], "nom": r[1]} for r in rows]
+
+
+def get_filieres_tc_groupe(groupe_tc, date_lundi, jour, creneau):
+    if not groupe_tc:
+        return []
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""SELECT filiere_id FROM cours
+                 WHERE groupe_tc=? AND date_lundi=? AND jour=? AND creneau=?""",
+              (groupe_tc, date_lundi, jour, creneau))
+    rows = c.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
