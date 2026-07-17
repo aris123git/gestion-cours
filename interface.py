@@ -7,7 +7,8 @@ from dialogs import GestionSallesDialog, GestionEffectifsDialog
 from export_pdf import export_all_filieres
 from allocation import allouer_salles_par_jour, allouer_toute_la_semaine
 from utils import get_lundi_week_courante, get_semaine_precedente, get_semaine_suivante
-from config import JOURS, CRENEAUX, CRENEAUX_LABELS, ANNEE_COURANTE
+from config import JOURS, CRENEAUX, CRENEAUX_LABELS, ANNEE_COURANTE, DB_PATH
+from desktop_sync import SyncClient, load_config_from_env
 
 class PlanningApp:
     def __init__(self, root):
@@ -21,14 +22,77 @@ class PlanningApp:
         self.current_date_lundi = tk.StringVar(value=get_lundi_week_courante())
         self.current_etablissement = tk.StringVar(value="IST")
         self.current_type_cours = tk.StringVar(value="Jour")
+        self.sync_status_var = tk.StringVar(value="Sync : inactif")
         
         self.cache_matieres = {}
         self.cache_enseignants = {}
 
+        self.sync_client = SyncClient(
+            load_config_from_env(DB_PATH),
+            on_status=self._on_sync_status,
+        )
+        self.sync_client.start_background()
+
         self.setup_selector()
         self.setup_grid()
         self.setup_menu()
+        self.setup_sync_bar()
         self.load_filieres()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_sync_status(self, status):
+        icon = {
+            "ok": "✓",
+            "syncing": "⟳",
+            "offline": "⚠",
+            "error": "✗",
+            "idle": "•",
+        }.get(status.state, "•")
+        pending = f" ({status.pending_count} en attente)" if status.pending_count else ""
+        msg = f"Sync {icon} {status.state}{pending} — {status.last_message}"
+        # Tk is not thread-safe; schedule UI update on the main thread
+        self.root.after(0, lambda: self.sync_status_var.set(msg[:120]))
+
+    def _trigger_sync(self, reason: str = "schedule_changed"):
+        """Automatic sync after every local modification."""
+        try:
+            self.sync_client.notify_local_change(reason)
+        except Exception as exc:  # noqa: BLE001
+            self.sync_status_var.set(f"Sync ✗ {exc}")
+
+    def sync_manual(self):
+        """Manual Sync button — full push of the local timetable."""
+        self.sync_status_var.set("Sync ⟳ synchronisation…")
+        status = self.sync_client.sync_now(full=True)
+        if status.conflicts:
+            details = "\n".join(
+                f"• desktop_id={c.get('desktop_id')}: {c.get('reason')}"
+                for c in status.conflicts[:10]
+            )
+            messagebox.showwarning("Conflits de synchronisation", details)
+        elif status.state == "ok":
+            messagebox.showinfo("Synchronisation", status.last_message)
+        elif status.state == "offline":
+            messagebox.showwarning(
+                "Hors ligne",
+                "Impossible de joindre le serveur. Les changements sont mis en file "
+                "et seront envoyés automatiquement dès que la connexion revient.",
+            )
+        else:
+            messagebox.showerror("Erreur de sync", status.last_message)
+
+    def setup_sync_bar(self):
+        bar = ttk.Frame(self.root, padding=4)
+        bar.pack(fill=tk.X, side=tk.BOTTOM)
+        ttk.Button(bar, text="☁ Synchroniser", command=self.sync_manual).pack(side=tk.LEFT, padx=4)
+        ttk.Label(bar, textvariable=self.sync_status_var).pack(side=tk.LEFT, padx=8)
+
+    def _on_close(self):
+        try:
+            self.sync_client.stop_background()
+        except Exception:  # noqa: BLE001
+            pass
+        self.root.destroy()
 
     def setup_selector(self):
         top_frame = ttk.Frame(self.root, padding=5)
@@ -180,6 +244,7 @@ class PlanningApp:
             allouer_salles_par_jour(date_lundi, jour)
             self.charger_grille()
             self.vider_cache()
+            self._trigger_sync("auto_save")
     
     def vider_cache(self):
         self.cache_matieres.clear()
@@ -286,6 +351,7 @@ class PlanningApp:
         ttk.Button(btn_frame, text="Allouer les salles (semaine)", command=self.allouer_toute_semaine).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Exporter PDF", command=self.exporter_pdf).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Réinitialiser semaine", command=self.reinitialiser_semaine).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="☁ Synchroniser", command=self.sync_manual).pack(side=tk.LEFT, padx=5)
 
     def modifier_cours(self, jour_idx, creneau_idx):
         """Ouvre une boîte de dialogue uniquement pour le tronc commun"""
@@ -387,6 +453,7 @@ class PlanningApp:
                     sauvegarder_cours(nouveau)
             
             self.charger_grille()
+            self._trigger_sync("tronc_commun")
             messagebox.showinfo("Succès", f"Tronc commun appliqué à {len(filieres_tc)} filière(s)")
             dialog.destroy()
         
@@ -402,6 +469,7 @@ class PlanningApp:
             supprimer_cours_filiere_semaine(fid, date_lundi)
             allouer_toute_la_semaine(date_lundi)
             self.charger_grille()
+            self._trigger_sync("week_reset")
 
     def sauvegarder_tous(self):
         fid = self.current_filiere_id.get()
@@ -422,7 +490,8 @@ class PlanningApp:
         allouer_toute_la_semaine(date_lundi)
         self.charger_grille()
         self.vider_cache()
-        messagebox.showinfo("Info", "Tous les cours ont été sauvegardés.")
+        self._trigger_sync("save_all")
+        messagebox.showinfo("Info", "Tous les cours ont été sauvegardés et synchronisés.")
 
     def allouer_toute_semaine(self):
         allouer_toute_la_semaine(self.current_date_lundi.get())
@@ -468,6 +537,14 @@ class PlanningApp:
         menubar.add_cascade(label="Filières", menu=menu_filieres)
         menu_filieres.add_command(label="Nouvelle filière", command=self.ajouter_filiere)
         menu_filieres.add_command(label="Supprimer filière", command=self.supprimer_filiere)
+
+        menu_sync = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Synchronisation", menu=menu_sync)
+        menu_sync.add_command(label="Synchroniser maintenant", command=self.sync_manual)
+        menu_sync.add_command(
+            label="État de la synchronisation",
+            command=lambda: messagebox.showinfo("Sync", self.sync_status_var.get()),
+        )
 
         menu_config = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Configuration", menu=menu_config)

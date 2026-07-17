@@ -1,0 +1,6 @@
+# Desktop application (Tkinter admin tool)
+reportlab>=4.0
+# Sync uses stdlib urllib only
+
+# Optional: run desktop against local API helpers
+httpx>=0.27

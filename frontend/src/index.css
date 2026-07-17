@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --color-brand-50: #f0f5fb;
+  --color-brand-100: #dce8f6;
+  --color-brand-200: #b9d1ed;
+  --color-brand-300: #7eb6ff;
+  --color-brand-400: #4a90e2;
+  --color-brand-500: #2b6cb0;
+  --color-brand-600: #1e4d8c;
+  --color-brand-700: #163a6b;
+  --color-brand-800: #0f2a4d;
+  --color-brand-900: #0a1c33;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background: linear-gradient(165deg, #f0f5fb 0%, #e8f0fa 45%, #dce8f6 100%);
+  min-height: 100dvh;
+  color: #0f2a4d;
+}
+
+.dark body,
+html.dark body {
+  background: linear-gradient(165deg, #0a1c33 0%, #0f2a4d 50%, #163a6b 100%);
+  color: #e8f0fa;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .print-area {
+    box-shadow: none !important;
+  }
+}

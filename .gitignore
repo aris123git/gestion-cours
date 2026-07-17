@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+backend/.env
+backend/gestion_online.db
+backend/.venv/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/dev-dist/
+frontend/.env
+
+# Desktop sync queue (local pending changes)
+sync_queue.json
+
+# Exports / OS / IDE
+exports/
+.idea/
+.vscode/
+.DS_Store
+*.log
+*.db-journal
+
+# Build
+dist/
+build/
+*.spec.bak

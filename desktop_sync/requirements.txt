@@ -1,0 +1,2 @@
+# Desktop sync has no third-party deps beyond the stdlib + optional requests.
+# The desktop app already uses urllib for HTTP.
