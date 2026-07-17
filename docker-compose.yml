@@ -1,35 +1,16 @@
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: gestion
-      POSTGRES_PASSWORD: gestion
-      POSTGRES_DB: gestion_cours
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gestion -d gestion_cours"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   backend:
     build: ./backend
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+psycopg2://gestion:gestion@db:5432/gestion_cours
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-change-in-production}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-desktop-admin-sync-key-change-me}
       CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://localhost,http://127.0.0.1:5173
-    depends_on:
-      db:
-        condition: service_healthy
     command: >
-      sh -c "python -m app.seed &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
   frontend:
     build:
@@ -40,6 +21,3 @@ services:
       - "3000:80"
     depends_on:
       - backend
-
-volumes:
-  pgdata:

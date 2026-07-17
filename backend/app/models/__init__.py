@@ -1,132 +1,70 @@
-"""SQLAlchemy ORM models for the online timetable database."""
+"""Lightweight row helpers for Supabase JSON responses (no SQLAlchemy)."""
+
+from __future__ import annotations
 
 from datetime import date, datetime, time
-
-from sqlalchemy import (
-    Boolean,
-    Column,
-    Date,
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-    Time,
-    UniqueConstraint,
-    Index,
-)
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-
-from app.db.session import Base
+from typing import Any, Optional
 
 
-class Filiere(Base):
-    __tablename__ = "filieres"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(120), nullable=False)
-    level = Column(String(40), nullable=False)  # L1, L2, L3, Master, Doctorat
-    # Optional link to the desktop SQLite filiere id for sync
-    desktop_id = Column(Integer, nullable=True, unique=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    students = relationship("Student", back_populates="filiere")
-    schedules = relationship("Schedule", back_populates="filiere")
-
-    __table_args__ = (UniqueConstraint("name", "level", name="uq_filiere_name_level"),)
+def parse_time(value: Any) -> Optional[time]:
+    if value is None:
+        return None
+    if isinstance(value, time):
+        return value
+    text = str(value)
+    if len(text) == 5:
+        text = f"{text}:00"
+    return time.fromisoformat(text)
 
 
-class Teacher(Base):
-    __tablename__ = "teachers"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(160), nullable=False, unique=True)
-    email = Column(String(255), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-
-class Room(Base):
-    __tablename__ = "rooms"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(80), nullable=False, unique=True)
-    capacity = Column(Integer, nullable=False, default=0)
-    desktop_id = Column(Integer, nullable=True, unique=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+def parse_date(value: Any) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    return date.fromisoformat(str(value)[:10])
 
 
-class Course(Base):
-    """Catalogue entry for a subject (matière)."""
-
-    __tablename__ = "courses"
-
-    id = Column(Integer, primary_key=True, index=True)
-    subject = Column(String(160), nullable=False, unique=True)
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+def parse_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).replace("Z", "+00:00")
+    return datetime.fromisoformat(text)
 
 
-class Student(Base):
-    __tablename__ = "students"
-
-    id = Column(Integer, primary_key=True, index=True)
-    student_number = Column(String(40), nullable=False, unique=True, index=True)
-    first_name = Column(String(80), nullable=False)
-    last_name = Column(String(80), nullable=False)
-    email = Column(String(255), nullable=False, unique=True)
-    password_hash = Column(String(255), nullable=False)
-    filiere_id = Column(Integer, ForeignKey("filieres.id"), nullable=False)
-    level = Column(String(40), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    filiere = relationship("Filiere", back_populates="students")
-    notifications = relationship("Notification", back_populates="student", cascade="all, delete-orphan")
+def time_str(value: time | str | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value if len(value) > 5 else f"{value}:00"
+    return value.strftime("%H:%M:%S")
 
 
-class Schedule(Base):
-    __tablename__ = "schedule"
-
-    id = Column(Integer, primary_key=True, index=True)
-    # Stable id from the desktop SQLite `cours.id` — prevents duplicates on sync
-    desktop_id = Column(Integer, nullable=True, unique=True, index=True)
-    filiere_id = Column(Integer, ForeignKey("filieres.id"), nullable=False, index=True)
-    day = Column(String(20), nullable=False)  # Lundi … Samedi
-    start_time = Column(Time, nullable=False)
-    end_time = Column(Time, nullable=False)
-    subject = Column(String(160), nullable=False)
-    teacher = Column(String(160), nullable=False)
-    room = Column(String(80), nullable=True)
-    group_tc = Column(String(120), nullable=True)
-    week_date = Column(Date, nullable=False, index=True)  # Monday of the week
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    filiere = relationship("Filiere", back_populates="schedules")
-
-    __table_args__ = (
-        Index("ix_schedule_week_filiere", "week_date", "filiere_id"),
-        UniqueConstraint(
-            "filiere_id",
-            "week_date",
-            "day",
-            "start_time",
-            "subject",
-            "group_tc",
-            name="uq_schedule_slot",
-        ),
-    )
+def date_str(value: date | str | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value[:10]
+    return value.isoformat()
 
 
-class Notification(Base):
-    __tablename__ = "notifications"
+class StudentRow:
+    """Minimal student object used by auth dependencies."""
 
-    id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)
-    filiere_id = Column(Integer, ForeignKey("filieres.id"), nullable=True, index=True)
-    title = Column(String(200), nullable=False)
-    message = Column(Text, nullable=False)
-    is_read = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    student = relationship("Student", back_populates="notifications")
+    def __init__(self, data: dict[str, Any]):
+        self.id = int(data["id"])
+        self.student_number = data["student_number"]
+        self.first_name = data["first_name"]
+        self.last_name = data["last_name"]
+        self.email = data["email"]
+        self.password_hash = data["password_hash"]
+        self.filiere_id = int(data["filiere_id"])
+        self.level = data["level"]
+        self.created_at = parse_datetime(data.get("created_at"))
+        filiere = data.get("filieres") or data.get("filiere")
+        if isinstance(filiere, list):
+            filiere = filiere[0] if filiere else None
+        self.filiere_name = filiere.get("name") if isinstance(filiere, dict) else None
+        self.filiere_level = filiere.get("level") if isinstance(filiere, dict) else None

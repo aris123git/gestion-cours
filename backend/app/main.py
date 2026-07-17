@@ -1,29 +1,16 @@
 """
 GestionCours FastAPI application entrypoint.
 
-Student portal API + desktop admin sync.
+Student portal API + desktop admin sync, backed by Supabase.
 Interactive docs: /docs  |  OpenAPI JSON: /openapi.json
 """
-
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, schedule
 from app.core.config import get_settings
-from app.db.session import Base, engine
 from app.schemas import HealthResponse
-
-# Import models so metadata is registered
-import app.models  # noqa: F401
-
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    # Create tables on startup (Alembic preferred in production)
-    Base.metadata.create_all(bind=engine)
-    yield
 
 
 def create_app() -> FastAPI:
@@ -33,10 +20,9 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         description=(
             "REST API for the GestionCours hybrid timetable system. "
-            "Students authenticate with student number + password. "
+            "Data is stored in Supabase. Students authenticate with student number + password. "
             "The Windows desktop app syncs schedules via `POST /sync` using `X-API-Key`."
         ),
-        lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
     )

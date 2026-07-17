@@ -1,11 +1,11 @@
 # GestionCours — Hybrid Timetable System
 
-Windows **desktop app for administrators** + **student web portal**, synchronized through a FastAPI backend.
+Windows **desktop app for administrators** + **student web portal**, synchronized through a FastAPI backend backed by **Supabase**.
 
 ```
 ┌─────────────────────┐         POST /sync          ┌──────────────────┐
-│  Desktop (Tkinter)  │ ──────────────────────────► │  FastAPI + PG    │
-│  SQLite local DB    │   X-API-Key                 │  JWT for students│
+│  Desktop (Tkinter)  │ ──────────────────────────► │  FastAPI         │
+│  SQLite local DB    │   X-API-Key                 │  + Supabase      │
 │  + desktop_sync/    │                             └────────┬─────────┘
 └─────────────────────┘                                      │
                                                              │ GET /schedule
@@ -36,18 +36,34 @@ Windows **desktop app for administrators** + **student web portal**, synchronize
 ## Project layout
 
 ```
-backend/           FastAPI + SQLAlchemy + Alembic
+supabase/          SQL schema + setup notes (hosted Postgres)
+backend/           FastAPI + supabase-py (service role)
 frontend/          React + Vite + Tailwind (student PWA)
 desktop_sync/      Sync client used by the Tkinter app
 docs/API.md        REST documentation
 scripts/           Student creation helper
-docker-compose.yml PostgreSQL + API + frontend
+docker-compose.yml API + frontend (no local Postgres)
 *.py               Existing Windows desktop application
+```
+
+## Supabase setup (required)
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Run [`supabase/migrations/20260717000000_initial_schema.sql`](supabase/migrations/20260717000000_initial_schema.sql) in the SQL Editor.
+3. Copy Project URL + **service_role** key into `backend/.env` (see [`supabase/README.md`](supabase/README.md)).
+
+```bash
+cp backend/.env.example backend/.env
+# edit SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+cd backend && pip install -r requirements.txt && python -m app.seed
 ```
 
 ## Quick start (Docker)
 
 ```bash
+# Export Supabase credentials first
+export SUPABASE_URL=https://xxxx.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=eyJ...
 docker compose up --build
 ```
 
@@ -63,18 +79,9 @@ docker compose up --build
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# For a quick local demo without Postgres:
-# export DATABASE_URL=sqlite:///./gestion_online.db
+cp .env.example .env   # set Supabase keys
 uvicorn app.main:app --reload --port 8000
 python -m app.seed
-```
-
-Migrations (PostgreSQL):
-
-```bash
-cd backend
-alembic upgrade head
 ```
 
 ### Frontend
@@ -91,19 +98,20 @@ Open http://localhost:5173 (Vite proxies `/api` → `:8000`).
 
 ```bash
 pip install -r requirements.txt
-# Point sync at the API:
 export GESTION_API_URL=http://127.0.0.1:8000
 export GESTION_API_KEY=desktop-admin-sync-key-change-me
 python main.py
 ```
 
-Use **☁ Synchroniser** or save a course — changes are pushed to the online database.
+Use **☁ Synchroniser** or save a course — changes are pushed to Supabase via the API.
 
 ## Environment variables
 
 | Variable | Component | Purpose |
 |----------|-----------|---------|
-| `DATABASE_URL` | backend | SQLAlchemy URL |
+| `SUPABASE_URL` | backend | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | backend | Server key (never expose to browsers) |
+| `SUPABASE_ANON_KEY` | optional | Public anon key if SPA talks to Supabase later |
 | `SECRET_KEY` | backend | JWT signing |
 | `ADMIN_API_KEY` | backend / desktop | Desktop sync key (`X-API-Key`) |
 | `CORS_ORIGINS` | backend | Allowed frontends |
@@ -111,16 +119,18 @@ Use **☁ Synchroniser** or save a course — changes are pushed to the online d
 | `GESTION_API_KEY` | desktop | Same as `ADMIN_API_KEY` |
 | `VITE_API_URL` | frontend | API base (use `/api` behind nginx) |
 
-## Database tables
+## Database tables (Supabase)
 
 `students`, `filieres`, `teachers`, `rooms`, `courses`, `schedule`, `notifications`  
-See Alembic migration `backend/alembic/versions/001_initial_schema.py`.
+Schema: `supabase/migrations/20260717000000_initial_schema.sql`.
+
+Local desktop SQLite (`gestion_cours.db`) remains the admin working copy and syncs online.
 
 ## Synchronization flow
 
 1. Admin saves locally (SQLite).
 2. Desktop calls `POST /sync` with filières, rooms, and schedules (`desktop_id` for idempotency).
-3. Server upserts / deletes; notifies students of the affected filière.
+3. API upserts / deletes in Supabase; notifies students of the affected filière.
 4. Student portal polls notifications and refreshes the schedule.
 
 If the network is down, changes are stored in `sync_queue.json` and flushed automatically when `/health` responds again.

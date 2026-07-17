@@ -4,6 +4,8 @@ Interactive OpenAPI docs are available at **`/docs`** (Swagger UI) and **`/redoc
 
 Base URL (local): `http://127.0.0.1:8000`
 
+Data store: **Supabase** (PostgreSQL). The FastAPI layer uses the service role key.
+
 ## Authentication
 
 ### Student JWT
@@ -76,4 +78,4 @@ If the server copy is newer than the client `updated_at`, a **conflict** is repo
 
 ## Health
 
-`GET /health` → `{ "status": "ok", "version": "1.0.0" }`
+`GET /health` → `{ "status": "ok", "version": "2.0.0" }`

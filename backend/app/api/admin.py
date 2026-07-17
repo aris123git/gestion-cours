@@ -1,44 +1,48 @@
 """Admin / desktop sync endpoints."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import require_admin_api_key
-from app.db.session import get_db
-from app.models import Schedule
+from app.db.supabase import first_or_none, sb
+from app.models import date_str, parse_date, parse_datetime, parse_time, time_str
 from app.schemas import ScheduleCreate, ScheduleOut, ScheduleUpdate, SyncPayload, SyncResult
 from app.services.sync import apply_sync
 
 router = APIRouter(prefix="/admin", tags=["Admin Sync"], dependencies=[Depends(require_admin_api_key)])
 
 
-def _to_out(row: Schedule) -> ScheduleOut:
+def _to_out(row: dict[str, Any]) -> ScheduleOut:
+    filiere = row.get("filieres") or {}
+    if isinstance(filiere, list):
+        filiere = filiere[0] if filiere else {}
     return ScheduleOut(
-        id=row.id,
-        desktop_id=row.desktop_id,
-        filiere_id=row.filiere_id,
-        day=row.day,
-        start_time=row.start_time,
-        end_time=row.end_time,
-        subject=row.subject,
-        teacher=row.teacher,
-        room=row.room,
-        group_tc=row.group_tc,
-        week_date=row.week_date,
-        updated_at=row.updated_at,
-        filiere_name=row.filiere.name if row.filiere else None,
-        filiere_level=row.filiere.level if row.filiere else None,
+        id=int(row["id"]),
+        desktop_id=row.get("desktop_id"),
+        filiere_id=int(row["filiere_id"]),
+        day=row["day"],
+        start_time=parse_time(row["start_time"]),
+        end_time=parse_time(row["end_time"]),
+        subject=row["subject"],
+        teacher=row["teacher"],
+        room=row.get("room"),
+        group_tc=row.get("group_tc"),
+        week_date=parse_date(row["week_date"]),
+        updated_at=parse_datetime(row.get("updated_at")),
+        filiere_name=filiere.get("name") if filiere else None,
+        filiere_level=filiere.get("level") if filiere else None,
     )
 
 
 @router.post("/sync", response_model=SyncResult)
-def sync_timetable(payload: SyncPayload, db: Session = Depends(get_db)):
+def sync_timetable(payload: SyncPayload):
     """
     Full sync from the desktop application.
     Uploads new schedules, updates modified ones, deletes removed ones.
     Uses desktop_id to avoid duplicates.
     """
-    return apply_sync(db, payload)
+    return apply_sync(payload)
 
 
 # Also expose at /sync as requested in the API spec
@@ -46,15 +50,14 @@ sync_router = APIRouter(tags=["Admin Sync"], dependencies=[Depends(require_admin
 
 
 @sync_router.post("/sync", response_model=SyncResult)
-def sync_timetable_root(payload: SyncPayload, db: Session = Depends(get_db)):
-    return apply_sync(db, payload)
+def sync_timetable_root(payload: SyncPayload):
+    return apply_sync(payload)
 
 
 @sync_router.put("/schedule", response_model=ScheduleOut)
-def upsert_schedule(body: ScheduleCreate, db: Session = Depends(get_db)):
+def upsert_schedule(body: ScheduleCreate):
     """Create or update a single schedule entry (admin)."""
     result = apply_sync(
-        db,
         SyncPayload(schedules=[body], notify_students=True),
     )
     if result.conflicts and not (result.created or result.updated):
@@ -62,11 +65,13 @@ def upsert_schedule(body: ScheduleCreate, db: Session = Depends(get_db)):
 
     row = None
     if body.desktop_id is not None:
-        row = (
-            db.query(Schedule)
-            .options(joinedload(Schedule.filiere))
-            .filter(Schedule.desktop_id == body.desktop_id)
-            .first()
+        row = first_or_none(
+            sb()
+            .table("schedule")
+            .select("*, filieres(name, level)")
+            .eq("desktop_id", body.desktop_id)
+            .limit(1)
+            .execute()
         )
     if not row:
         raise HTTPException(status_code=500, detail="Schedule upsert failed")
@@ -74,28 +79,48 @@ def upsert_schedule(body: ScheduleCreate, db: Session = Depends(get_db)):
 
 
 @sync_router.delete("/schedule/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
+def delete_schedule(schedule_id: int):
     """Delete a schedule by server id."""
-    row = db.query(Schedule).filter(Schedule.id == schedule_id).first()
-    if not row:
+    existing = first_or_none(
+        sb().table("schedule").select("id").eq("id", schedule_id).limit(1).execute()
+    )
+    if not existing:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    db.delete(row)
-    db.commit()
+    sb().table("schedule").delete().eq("id", schedule_id).execute()
     return None
 
 
 @sync_router.patch("/schedule/{schedule_id}", response_model=ScheduleOut)
-def patch_schedule(schedule_id: int, body: ScheduleUpdate, db: Session = Depends(get_db)):
-    row = (
-        db.query(Schedule)
-        .options(joinedload(Schedule.filiere))
-        .filter(Schedule.id == schedule_id)
-        .first()
+def patch_schedule(schedule_id: int, body: ScheduleUpdate):
+    existing = first_or_none(
+        sb()
+        .table("schedule")
+        .select("*, filieres(name, level)")
+        .eq("id", schedule_id)
+        .limit(1)
+        .execute()
     )
-    if not row:
+    if not existing:
         raise HTTPException(status_code=404, detail="Schedule not found")
+
+    patch: dict[str, Any] = {}
     for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(row, field, value)
-    db.commit()
-    db.refresh(row)
+        if field in ("start_time", "end_time"):
+            patch[field] = time_str(value)
+        elif field == "week_date":
+            patch[field] = date_str(value)
+        else:
+            patch[field] = value
+
+    if patch:
+        sb().table("schedule").update(patch).eq("id", schedule_id).execute()
+
+    row = first_or_none(
+        sb()
+        .table("schedule")
+        .select("*, filieres(name, level)")
+        .eq("id", schedule_id)
+        .limit(1)
+        .execute()
+    )
     return _to_out(row)

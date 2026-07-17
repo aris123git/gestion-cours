@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Create a student account in the online database.
+Create a student account in Supabase.
 
 Usage:
   cd backend && python ../scripts/create_student.py \\
@@ -18,12 +18,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from app.core.security import hash_password
-from app.db.session import SessionLocal
-from app.models import Filiere, Student
+from app.db.supabase import first_or_none, sb
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create a student account")
+    parser = argparse.ArgumentParser(description="Create a student account in Supabase")
     parser.add_argument("--number", required=True)
     parser.add_argument("--first", required=True)
     parser.add_argument("--last", required=True)
@@ -33,27 +32,35 @@ def main() -> None:
     parser.add_argument("--password", required=True)
     args = parser.parse_args()
 
-    db = SessionLocal()
-    try:
-        filiere = db.query(Filiere).filter(Filiere.id == args.filiere_id).first()
-        if not filiere:
-            raise SystemExit(f"Filière id={args.filiere_id} introuvable")
-        if db.query(Student).filter(Student.student_number == args.number).first():
-            raise SystemExit("Numéro d'étudiant déjà utilisé")
-        student = Student(
-            student_number=args.number,
-            first_name=args.first,
-            last_name=args.last,
-            email=args.email,
-            password_hash=hash_password(args.password),
-            filiere_id=args.filiere_id,
-            level=args.level,
+    filiere = first_or_none(
+        sb().table("filieres").select("id").eq("id", args.filiere_id).limit(1).execute()
+    )
+    if not filiere:
+        raise SystemExit(f"Filière id={args.filiere_id} introuvable")
+    if first_or_none(
+        sb().table("students").select("id").eq("student_number", args.number).limit(1).execute()
+    ):
+        raise SystemExit("Numéro d'étudiant déjà utilisé")
+
+    row = (
+        sb()
+        .table("students")
+        .insert(
+            {
+                "student_number": args.number,
+                "first_name": args.first,
+                "last_name": args.last,
+                "email": args.email,
+                "password_hash": hash_password(args.password),
+                "filiere_id": args.filiere_id,
+                "level": args.level,
+            }
         )
-        db.add(student)
-        db.commit()
-        print(f"Étudiant créé: {args.number} → id={student.id}")
-    finally:
-        db.close()
+        .execute()
+        .data
+    )
+    student_id = row[0]["id"] if row else "?"
+    print(f"Étudiant créé: {args.number} → id={student_id}")
 
 
 if __name__ == "__main__":
