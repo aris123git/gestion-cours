@@ -36,7 +36,8 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     Student self-registration.
     Creates an account (bcrypt password) and returns a JWT so the user is logged in immediately.
     """
-    number = body.student_number.strip()
+    # Validated / normalized by RegisterRequest (must be IST.W + digits)
+    number = body.student_number
     email = str(body.email).strip().lower()
 
     if db.query(Student).filter(Student.student_number == number).first():

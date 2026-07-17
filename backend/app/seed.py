@@ -20,8 +20,17 @@ def seed() -> None:
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        if db.query(Student).filter(Student.student_number == "20250001").first():
-            print("Seed already applied — skipping.")
+        existing = db.query(Student).filter(
+            Student.student_number.in_(["IST.W20250001", "20250001"])
+        ).first()
+        if existing:
+            # Migrate legacy demo numbers to IST.W… format if needed
+            for old, new in (("20250001", "IST.W20250001"), ("20250002", "IST.W20250002")):
+                row = db.query(Student).filter(Student.student_number == old).first()
+                if row and not db.query(Student).filter(Student.student_number == new).first():
+                    row.student_number = new
+            db.commit()
+            print("Seed already applied — skipping (demo IDs normalized to IST.W…).")
             return
 
         filieres = [
@@ -59,7 +68,7 @@ def seed() -> None:
 
         students = [
             Student(
-                student_number="20250001",
+                student_number="IST.W20250001",
                 first_name="Amina",
                 last_name="Diallo",
                 email="amina.diallo@univ.example",
@@ -68,7 +77,7 @@ def seed() -> None:
                 level="L1",
             ),
             Student(
-                student_number="20250002",
+                student_number="IST.W20250002",
                 first_name="Karim",
                 last_name="Ndiaye",
                 email="karim.ndiaye@univ.example",
@@ -154,8 +163,8 @@ def seed() -> None:
         db.add_all(sample)
         db.commit()
         print("Seed complete.")
-        print("  Demo student : 20250001 / password123  (L1 Informatique)")
-        print("  Demo student : 20250002 / password123  (L2 Informatique)")
+        print("  Demo student : IST.W20250001 / password123  (L1 Informatique)")
+        print("  Demo student : IST.W20250002 / password123  (L2 Informatique)")
     finally:
         db.close()
 

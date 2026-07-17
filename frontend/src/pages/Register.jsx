@@ -70,7 +70,7 @@ export default function Register() {
     setSubmitting(true)
     try {
       const data = await register({
-        student_number: form.student_number.trim(),
+        student_number: form.student_number.trim().toUpperCase(),
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         email: form.email.trim(),
@@ -142,15 +142,20 @@ export default function Register() {
 
             <label className="block text-sm">
               <span className="mb-1 block font-semibold text-ist-600 dark:text-ist-200">
-                Numéro d&apos;étudiant
+                Numéro d&apos;étudiant (INE)
               </span>
               <input
                 required
+                pattern="IST\.W[0-9]+"
+                title="Doit commencer par IST.W suivi de chiffres"
                 className={fieldClass}
                 value={form.student_number}
-                onChange={(e) => update('student_number', e.target.value)}
-                placeholder="ex. 20250010"
+                onChange={(e) => update('student_number', e.target.value.toUpperCase())}
+                placeholder="IST.W20250001"
               />
+              <span className="mt-1 block text-xs text-ist-400">
+                Format obligatoire : IST.W + chiffres (ex. IST.W20250001)
+              </span>
             </label>
 
             <label className="block text-sm">

@@ -3,24 +3,48 @@
 from datetime import date, datetime, time
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.core.student_id import STUDENT_NUMBER_HINT, validate_student_number
 
 
 # ---------- Auth ----------
 
 class LoginRequest(BaseModel):
-    student_number: str = Field(..., min_length=1, max_length=40)
+    student_number: str = Field(
+        ...,
+        min_length=6,
+        max_length=40,
+        description=STUDENT_NUMBER_HINT,
+        examples=["IST.W20250001"],
+    )
     password: str = Field(..., min_length=1)
+
+    @field_validator("student_number")
+    @classmethod
+    def _check_student_number_login(cls, value: str) -> str:
+        return validate_student_number(value)
 
 
 class RegisterRequest(BaseModel):
-    student_number: str = Field(..., min_length=1, max_length=40)
+    student_number: str = Field(
+        ...,
+        min_length=6,
+        max_length=40,
+        description=STUDENT_NUMBER_HINT,
+        examples=["IST.W20250001"],
+    )
     first_name: str = Field(..., min_length=1, max_length=80)
     last_name: str = Field(..., min_length=1, max_length=80)
     email: EmailStr
     password: str = Field(..., min_length=6, max_length=128)
     filiere_id: int
     level: str = Field(..., min_length=1, max_length=40)
+
+    @field_validator("student_number")
+    @classmethod
+    def _check_student_number_register(cls, value: str) -> str:
+        return validate_student_number(value)
 
 
 class TokenResponse(BaseModel):

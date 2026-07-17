@@ -1,17 +1,18 @@
-"""Generate a PDF timetable for a student (ReportLab)."""
+"""Generate a PDF timetable for a student (ReportLab) with IST logo."""
 
 from __future__ import annotations
 
+import os
 from datetime import date, timedelta
 from io import BytesIO
+from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 IST_NAVY = colors.HexColor("#003366")
 IST_BLUE = colors.HexColor("#0073BB")
@@ -20,6 +21,25 @@ IST_LIGHT = colors.HexColor("#E4EEF7")
 WHITE = colors.white
 
 DAY_ORDER = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
+
+_LOGO_CANDIDATES = [
+    Path(__file__).resolve().parents[1] / "static" / "ist-logo.jpeg",  # backend/app/static
+    Path(__file__).resolve().parents[3] / "frontend" / "public" / "ist-logo.jpeg",
+    Path(__file__).resolve().parents[3] / "fichiers" / "logoist.jpeg",
+    Path("/workspace/backend/app/static/ist-logo.jpeg"),
+    Path("/workspace/frontend/public/ist-logo.jpeg"),
+    Path("/workspace/fichiers/logoist.jpeg"),
+]
+
+
+def _find_logo() -> Path | None:
+    for path in _LOGO_CANDIDATES:
+        if path.is_file():
+            return path
+    env = os.environ.get("IST_LOGO_PATH")
+    if env and Path(env).is_file():
+        return Path(env)
+    return None
 
 
 def _fmt_time(t) -> str:
@@ -43,15 +63,16 @@ def build_schedule_pdf(
     level: str,
     week: date,
     courses: list,
+    logo_path: str | Path | None = None,
 ) -> bytes:
-    """Return PDF bytes for the weekly timetable."""
+    """Return PDF bytes for the weekly timetable, including the IST logo."""
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=landscape(A4),
         leftMargin=1.2 * cm,
         rightMargin=1.2 * cm,
-        topMargin=1.4 * cm,
+        topMargin=1.2 * cm,
         bottomMargin=1.2 * cm,
         title=f"Emploi du temps — {student_name}",
     )
@@ -64,7 +85,7 @@ def build_schedule_pdf(
         fontSize=18,
         textColor=IST_NAVY,
         alignment=TA_CENTER,
-        spaceAfter=4,
+        spaceAfter=2,
     )
     subtitle_style = ParagraphStyle(
         "IstSub",
@@ -99,21 +120,31 @@ def build_schedule_pdf(
         alignment=TA_CENTER,
     )
 
-    elements = [
-        Paragraph("IST Wayalghin", title_style),
-        Paragraph("Pour l'excellence — Emploi du temps", subtitle_style),
-        Paragraph(f"<b>Étudiant :</b> {student_name} ({student_number})", meta_style),
-        Paragraph(f"<b>Parcours :</b> {level} — {programme}", meta_style),
-        Paragraph(f"<b>Semaine :</b> {_week_label(week)}", meta_style),
-        Spacer(1, 0.35 * cm),
-    ]
+    elements = []
+
+    logo = Path(logo_path) if logo_path else _find_logo()
+    if logo and logo.is_file():
+        img = Image(str(logo), width=2.4 * cm, height=2.4 * cm)
+        img.hAlign = "CENTER"
+        elements.append(img)
+        elements.append(Spacer(1, 0.15 * cm))
+
+    elements.extend(
+        [
+            Paragraph("IST Wayalghin", title_style),
+            Paragraph("Pour l'excellence — Emploi du temps", subtitle_style),
+            Paragraph(f"<b>Étudiant :</b> {student_name} ({student_number})", meta_style),
+            Paragraph(f"<b>Parcours :</b> {level} — {programme}", meta_style),
+            Paragraph(f"<b>Semaine :</b> {_week_label(week)}", meta_style),
+            Spacer(1, 0.35 * cm),
+        ]
+    )
 
     def _val(obj, key, default=None):
         if isinstance(obj, dict):
             return obj.get(key, default)
         return getattr(obj, key, default)
 
-    # Group courses by day
     by_day: dict[str, list] = {d: [] for d in DAY_ORDER}
     for c in courses:
         day = _val(c, "day")
@@ -122,6 +153,7 @@ def build_schedule_pdf(
 
     for day in DAY_ORDER:
         by_day[day].sort(key=lambda x: str(_val(x, "start_time") or ""))
+
     max_rows = max((len(by_day[d]) for d in DAY_ORDER), default=0)
     max_rows = max(max_rows, 1)
 
@@ -148,7 +180,7 @@ def build_schedule_pdf(
                 row.append(Paragraph("—", cell_style))
         data.append(row)
 
-    col_w = (doc.width) / 6
+    col_w = doc.width / 6
     table = Table(data, colWidths=[col_w] * 6, repeatRows=1)
     table.setStyle(
         TableStyle(

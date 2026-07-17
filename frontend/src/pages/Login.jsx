@@ -18,7 +18,7 @@ export default function Login() {
     setError('')
     setSubmitting(true)
     try {
-      await login(studentNumber.trim(), password)
+      await login(studentNumber.trim().toUpperCase(), password)
       navigate('/select')
     } catch (err) {
       setError(err.message || 'Connexion impossible')
@@ -55,16 +55,18 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             <label className="block">
               <span className="mb-1.5 block text-sm font-semibold text-ist-600 dark:text-ist-200">
-                Numéro d&apos;étudiant
+                Numéro d&apos;étudiant (INE)
               </span>
               <input
                 type="text"
                 autoComplete="username"
                 required
+                pattern="IST\.W[0-9]+"
+                title="Doit commencer par IST.W suivi de chiffres"
                 value={studentNumber}
-                onChange={(e) => setStudentNumber(e.target.value)}
+                onChange={(e) => setStudentNumber(e.target.value.toUpperCase())}
                 className="w-full rounded-2xl border border-ist-200 bg-ist-50/60 px-4 py-3 text-ist-800 outline-none ring-gold-400 transition focus:ring-2 dark:border-ist-600 dark:bg-ist-900/50 dark:text-ist-50"
-                placeholder="ex. 20250001"
+                placeholder="IST.W20250001"
               />
             </label>
             <label className="block">
@@ -106,7 +108,7 @@ export default function Login() {
               Accueil
             </Link>
           </p>
-          <p className="mt-2 text-center text-xs text-ist-400">Démo : 20250001 / password123</p>
+          <p className="mt-2 text-center text-xs text-ist-400">Démo : IST.W20250001 / password123</p>
         </div>
       </main>
       <Footer />
