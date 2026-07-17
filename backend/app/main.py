@@ -41,10 +41,14 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
+    origins = settings.cors_origin_list
+    # Allow any Netlify deploy URL + optional explicit "*" for public APIs
+    allow_all = "*" in origins
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
+        allow_origins=["*"] if allow_all else [o for o in origins if "*" not in o],
+        allow_origin_regex=r"https://.*\.netlify\.(app|com)$" if not allow_all else None,
+        allow_credentials=not allow_all,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -99,6 +99,47 @@ python main.py
 
 Use **☁ Synchroniser** or save a course — changes are pushed to the online database.
 
+## Deploy the student website on Netlify
+
+Netlify hosts **only the React frontend**. The FastAPI backend must be hosted separately
+(Render, Railway, Fly.io, a VPS, etc.) — Netlify cannot run PostgreSQL/Python APIs.
+
+### 1. Connect the repo
+
+1. In Netlify → **Add new site** → **Import an existing project** → GitHub `gestion-cours`
+2. **Production branch**: use `cursor/hybrid-student-portal-7460` (or `main` after merge).  
+   Deploying plain `main` before merge will fail — that branch has no `frontend/` app.
+3. `netlify.toml` at the repo root already sets:
+   - Base directory: `frontend`
+   - Build: `npm run build`
+   - Publish: `dist`
+   - SPA redirects for `/login` and `/dashboard`
+
+### 2. Point the site at your API
+
+In Netlify → **Site settings** → **Environment variables**, add:
+
+| Key | Value |
+|-----|--------|
+| `VITE_API_URL` | `https://YOUR-BACKEND-PUBLIC-URL` (no trailing slash) |
+
+Then **trigger a new deploy** (Vite bakes this value in at build time).
+
+On the backend host, set `CORS_ORIGINS` to include your Netlify URL, e.g.:
+
+```
+CORS_ORIGINS=https://your-site.netlify.app,http://localhost:5173
+```
+
+(or keep the default which allows `*.netlify.app` via CORS regex).
+
+### 3. Checklist if the Netlify site is blank / 404
+
+- Wrong branch selected (must contain `frontend/`)
+- Build settings overridden in the UI (clear them and rely on `netlify.toml`)
+- Missing SPA redirect → refresh on `/login` 404s (fixed by `netlify.toml` + `_redirects`)
+- Login fails → `VITE_API_URL` not set or backend down
+
 ## Environment variables
 
 | Variable | Component | Purpose |
@@ -109,7 +150,7 @@ Use **☁ Synchroniser** or save a course — changes are pushed to the online d
 | `CORS_ORIGINS` | backend | Allowed frontends |
 | `GESTION_API_URL` | desktop | API base URL |
 | `GESTION_API_KEY` | desktop | Same as `ADMIN_API_KEY` |
-| `VITE_API_URL` | frontend | API base (use `/api` behind nginx) |
+| `VITE_API_URL` | frontend | Public API URL on Netlify; `/api` only behind Docker/nginx |
 
 ## Database tables
 

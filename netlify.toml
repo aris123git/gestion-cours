@@ -1,0 +1,28 @@
+# Netlify configuration for the GestionCours student portal.
+# Connect this GitHub repo in Netlify → set branch to the one that contains `frontend/`.
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Set this in the Netlify UI (Site settings → Environment variables):
+  #   VITE_API_URL = https://YOUR-BACKEND-URL
+  # Example: https://gestion-cours-api.onrender.com
+  # Leave unset only for local Docker (defaults to /api).
+
+# SPA fallback — required so /login and /dashboard work on refresh
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Optional: if your backend is elsewhere and you prefer same-origin /api calls,
+# uncomment and replace the target URL (status 200 = reverse proxy):
+# [[redirects]]
+#   from = "/api/*"
+#   to = "https://YOUR-BACKEND-URL/:splat"
+#   status = 200
+#   force = true

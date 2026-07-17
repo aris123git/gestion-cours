@@ -1,4 +1,24 @@
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+/**
+ * API base URL.
+ * - Local Docker / Vite proxy: `/api`
+ * - Netlify production: set `VITE_API_URL` to your public FastAPI URL
+ *   (e.g. https://gestion-cours-api.onrender.com) in Netlify env vars, then redeploy.
+ */
+function resolveApiBase() {
+  const raw = (import.meta.env.VITE_API_URL || '/api').trim().replace(/\/$/, '')
+  return raw || '/api'
+}
+
+export const API_BASE = resolveApiBase()
+
+export function isApiConfiguredForProduction() {
+  // Relative /api only works behind a reverse proxy (Docker/nginx), not on bare Netlify.
+  if (typeof window === 'undefined') return true
+  const host = window.location.hostname
+  const isNetlify = host.endsWith('netlify.app') || host.endsWith('netlify.com')
+  if (!isNetlify) return true
+  return API_BASE.startsWith('http://') || API_BASE.startsWith('https://')
+}
 
 async function request(path, { method = 'GET', body, token, headers = {} } = {}) {
   const opts = {
@@ -16,7 +36,18 @@ async function request(path, { method = 'GET', body, token, headers = {} } = {})
     opts.headers.Authorization = `Bearer ${token}`
   }
 
-  const res = await fetch(`${API_BASE}${path}`, opts)
+  let res
+  try {
+    res = await fetch(`${API_BASE}${path}`, opts)
+  } catch {
+    const err = new Error(
+      isApiConfiguredForProduction()
+        ? 'Impossible de joindre le serveur API. Vérifiez que le backend est démarré.'
+        : 'API non configurée pour Netlify. Définissez VITE_API_URL (URL du backend) dans les variables d’environnement Netlify, puis redéployez.',
+    )
+    err.status = 0
+    throw err
+  }
   if (res.status === 204) return null
 
   let data = null

@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Navigate } from 'react-router-dom'
+import { API_BASE, isApiConfiguredForProduction } from '../api'
 
 export default function Landing() {
   const { student, loading } = useAuth()
   if (!loading && student) return <Navigate to="/dashboard" replace />
+  const apiReady = isApiConfiguredForProduction()
 
   return (
     <main className="relative min-h-[calc(100dvh-64px)] overflow-hidden">
@@ -35,6 +37,13 @@ export default function Landing() {
           Connectez-vous avec votre numéro d&apos;étudiant pour consulter la semaine en cours,
           filtrer par filière et télécharger votre planning en PDF.
         </p>
+        {!apiReady && (
+          <div className="max-w-xl rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-600 dark:bg-amber-900/40 dark:text-amber-100">
+            Site Netlify détecté, mais l’API n’est pas configurée (<code>VITE_API_URL</code> vaut
+            encore <code>{API_BASE}</code>). Hébergez le backend FastAPI, définissez{' '}
+            <code>VITE_API_URL</code> dans Netlify, puis redéployez.
+          </div>
+        )}
         <div className="flex flex-wrap gap-3">
           <Link
             to="/login"

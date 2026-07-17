@@ -22,12 +22,25 @@ class Settings(BaseSettings):
     # Admin sync API key (desktop application authenticates with this)
     admin_api_key: str = "desktop-admin-sync-key-change-me"
 
-    # CORS
-    cors_origins: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+    # CORS — comma-separated origins, or "*" to allow any (needed for Netlify + separate API host)
+    cors_origins: str = (
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,"
+        "https://*.netlify.app"
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        """Normalize Render/Heroku-style postgres:// URLs for SQLAlchemy + psycopg2."""
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif url.startswith("postgresql://") and "+psycopg2" not in url:
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return url
 
 
 @lru_cache
