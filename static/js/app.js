@@ -517,40 +517,52 @@ async function exportPdf(mode) {
     toast("Sélectionnez une filière", "warn");
     return;
   }
+
+  const payload = {
+    mode: mode === "all" ? "zip" : mode,
+    date_lundi: state.dateLundi,
+    etablissement: $("#sel-etab")?.value || null,
+  };
   if (mode === "one") {
+    payload.filiere_id = state.filiereId;
+  }
+
+  toast(mode === "one" ? "Génération du PDF…" : "Génération du ZIP…");
+
+  try {
     const res = await fetch("/api/export-pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "one",
-        filiere_id: state.filiereId,
-        date_lundi: state.dateLundi,
-      }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      toast("Export échoué", "error");
+      let msg = "Export échoué";
+      try {
+        const err = await res.json();
+        if (err?.error) msg = err.error;
+      } catch (_) {}
+      toast(msg, "error");
       return;
     }
+
     const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    const match = /filename="?([^"]+)"?/i.exec(cd);
+    const fallback =
+      mode === "one"
+        ? `emploi_du_temps_${state.dateLundi}.pdf`
+        : `EDT_${state.dateLundi}.zip`;
+    const filename = match?.[1] || fallback;
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `emploi_du_temps_${state.dateLundi}.pdf`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    toast("PDF téléchargé");
-    return;
-  }
-
-  const data = await api("/api/export-pdf", {
-    method: "POST",
-    body: JSON.stringify({ mode: "all", date_lundi: state.dateLundi }),
-  });
-  toast(`${data.count} PDF générés`);
-  if (data.files?.length) {
-    data.files.slice(0, 3).forEach((f) => {
-      window.open(`/api/export-pdf/download?path=${encodeURIComponent(f.path)}`, "_blank");
-    });
+    toast(mode === "one" ? "PDF téléchargé" : "Archive ZIP téléchargée");
+  } catch (e) {
+    toast("Export échoué", "error");
   }
 }
 

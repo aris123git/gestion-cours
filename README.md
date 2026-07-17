@@ -22,7 +22,8 @@ python main.py --desktop
 - Emploi du temps hebdomadaire par filière / année / université
 - Édition des cours (matière, enseignant, tronc commun)
 - Allocation automatique des salles selon les effectifs
-- Export PDF (filière ou toutes)
+- Export PDF soigné (une filière) ou archive ZIP (toutes, filtrée par université)
+- Design PDF aligné sur l'interface (vert campus, terracotta, polices Syne/Manrope)
 - Copie d'une semaine vers une autre
 - Gestion des salles, effectifs et filières
 - Recherche matière / enseignant

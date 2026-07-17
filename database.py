@@ -124,7 +124,7 @@ def get_filieres(annee=None, etablissement=None):
     c = conn.cursor()
     
     query = """
-        SELECT f.id, f.annee, f.nom 
+        SELECT f.id, f.annee, f.nom, e.nom
         FROM filieres f
         LEFT JOIN etablissements e ON f.etablissement_id = e.id
         WHERE 1=1
@@ -144,16 +144,21 @@ def get_filieres(annee=None, etablissement=None):
     c.execute(query, params)
     rows = c.fetchall()
     conn.close()
-    return [Filiere(id=r[0], annee=r[1], nom=r[2]) for r in rows]
+    return [Filiere(id=r[0], annee=r[1], nom=r[2], etablissement=r[3]) for r in rows]
 
 def get_filiere_by_id(id_):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, annee, nom FROM filieres WHERE id = ?", (id_,))
+    c.execute("""
+        SELECT f.id, f.annee, f.nom, e.nom
+        FROM filieres f
+        LEFT JOIN etablissements e ON f.etablissement_id = e.id
+        WHERE f.id = ?
+    """, (id_,))
     r = c.fetchone()
     conn.close()
     if r:
-        return Filiere(id=r[0], annee=r[1], nom=r[2])
+        return Filiere(id=r[0], annee=r[1], nom=r[2], etablissement=r[3])
     return None
 
 def supprimer_filiere(filiere_id):

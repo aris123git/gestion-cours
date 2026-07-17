@@ -18,7 +18,7 @@ from database import (
 )
 from models import Cours
 from allocation import allouer_salles_par_jour, allouer_toute_la_semaine
-from export_pdf import export_all_filieres, export_une_filiere
+from export_pdf import export_all_filieres, export_all_filieres_zip, export_une_filiere
 from utils import get_lundi_week_courante, get_semaine_precedente, get_semaine_suivante, format_date_fr
 
 app = Flask(__name__)
@@ -325,24 +325,44 @@ def api_copier_semaine():
 
 @app.route("/api/export-pdf", methods=["POST"])
 def api_export_pdf():
-    data = request.get_json(force=True)
+    data = request.get_json(force=True) or {}
     date_lundi = data.get("date_lundi") or get_lundi_week_courante()
-    mode = data.get("mode", "all")  # all | one
+    mode = data.get("mode", "all")  # all | one | zip
     filiere_id = data.get("filiere_id")
+    etablissement = data.get("etablissement") or None
 
-    if mode == "one" and filiere_id:
+    if mode == "one":
+        if not filiere_id:
+            return jsonify({"error": "filiere_id requis"}), 400
         path = export_une_filiere(filiere_id, date_lundi)
         if not path:
             return jsonify({"error": "Export échoué"}), 500
         return send_file(path, as_attachment=True, download_name=os.path.basename(path))
 
-    resultats = export_all_filieres(date_lundi)
+    if mode == "zip" or data.get("as_zip"):
+        zip_path, resultats = export_all_filieres_zip(
+            date_lundi, etablissement=etablissement
+        )
+        if not zip_path or not resultats:
+            return jsonify({"error": "Aucun PDF à exporter"}), 404
+        return send_file(
+            zip_path,
+            as_attachment=True,
+            download_name=os.path.basename(zip_path),
+            mimetype="application/zip",
+        )
+
+    resultats = export_all_filieres(date_lundi, etablissement=etablissement)
     nb_ok = sum(1 for r in resultats if r[1])
     return jsonify({
         "ok": True,
         "count": nb_ok,
         "files": [
-            {"filiere": f"{f.annee} {f.nom}", "path": path}
+            {
+                "filiere": f"{f.annee} {f.nom}",
+                "etablissement": getattr(f, "etablissement", None),
+                "path": path,
+            }
             for f, ok, path in resultats if ok
         ],
     })
@@ -351,13 +371,15 @@ def api_export_pdf():
 @app.route("/api/export-pdf/download")
 def api_download_pdf():
     path = request.args.get("path")
-    if not path or not os.path.isfile(path):
+    if not path:
         return jsonify({"error": "Fichier introuvable"}), 404
-    # sécurité : uniquement dans EXPORT_DIR
     from config import EXPORT_DIR
     real = os.path.realpath(path)
-    if not real.startswith(os.path.realpath(EXPORT_DIR)):
+    export_root = os.path.realpath(EXPORT_DIR)
+    if not (real == export_root or real.startswith(export_root + os.sep)):
         return jsonify({"error": "Accès refusé"}), 403
+    if not os.path.isfile(real):
+        return jsonify({"error": "Fichier introuvable"}), 404
     return send_file(real, as_attachment=True, download_name=os.path.basename(real))
 
 
