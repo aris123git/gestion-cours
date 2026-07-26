@@ -17,6 +17,13 @@ Ouvrez ensuite [http://127.0.0.1:5000](http://127.0.0.1:5000).
 python main.py --desktop
 ```
 
+## Tests
+
+```bash
+pip install -r requirements.txt
+pytest -v
+```
+
 ## Créer un `.exe` Windows
 
 À faire **sur Windows**, dans le dossier du projet (branche avec `requirements.txt`, `templates/`, `static/`) :
