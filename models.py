@@ -12,6 +12,7 @@ class Filiere:
     id: Optional[int]
     annee: str
     nom: str
+    etablissement: Optional[str] = None
 
 @dataclass
 class Cours:

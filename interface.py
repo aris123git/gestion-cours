@@ -432,14 +432,16 @@ class PlanningApp:
     def exporter_pdf(self):
         self.sauvegarder_tous()
         date_lundi = self.current_date_lundi.get()
-        logo_path = os.path.join(os.path.dirname(__file__), "fichiers", "logoist.jpeg")
+        from config import RESOURCE_DIR
+        logo_path = os.path.join(RESOURCE_DIR, "fichiers", "logoist.jpeg")
         if not os.path.exists(logo_path):
             print(f"Logo non trouvé : {logo_path}")
             logo_path = None
-        else:
-            print(f"✅ Logo trouvé : {logo_path}")
-        resultats = export_all_filieres(date_lundi, ANNEE_COURANTE, logo_path)
-        nb_ok = sum(1 for _, ok in resultats if ok)
+        etablissement = self.current_etablissement.get() or None
+        resultats = export_all_filieres(
+            date_lundi, ANNEE_COURANTE, logo_path, etablissement=etablissement
+        )
+        nb_ok = sum(1 for item in resultats if item[1])
         messagebox.showinfo("Export", f"Export terminé : {nb_ok} PDF générés")
 
     def semaine_precedente(self):

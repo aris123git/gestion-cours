@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GestionCours — Emplois du temps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <img src="/static/img/logo.jpeg" alt="" class="brand-logo" width="44" height="44" />
+      <div>
+        <p class="brand-name">GestionCours</p>
+        <p class="brand-sub">Emplois du temps universitaires</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn ghost" id="btn-help" title="Raccourcis">?</button>
+      <button type="button" class="btn ghost" id="btn-salles">Salles</button>
+      <button type="button" class="btn ghost" id="btn-effectifs">Effectifs</button>
+      <button type="button" class="btn ghost" id="btn-filieres">Filières</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="controls" aria-label="Filtres">
+      <div class="control">
+        <label for="sel-annee">Année</label>
+        <select id="sel-annee"></select>
+      </div>
+      <div class="control">
+        <label for="sel-etab">Université</label>
+        <select id="sel-etab"></select>
+      </div>
+      <div class="control">
+        <label for="sel-type">Type <span class="muted" title="Indicateur d'affichage">(info)</span></label>
+        <select id="sel-type" title="Jour / Soir / En ligne — référence pour la préparation"></select>
+      </div>
+      <div class="control grow">
+        <label for="sel-filiere">Filière</label>
+        <select id="sel-filiere"></select>
+      </div>
+      <div class="control week">
+        <label>Semaine</label>
+        <div class="week-nav">
+          <button type="button" class="icon-btn" id="btn-prev" aria-label="Semaine précédente">‹</button>
+          <input type="date" id="inp-semaine" />
+          <button type="button" class="icon-btn" id="btn-next" aria-label="Semaine suivante">›</button>
+          <button type="button" class="btn soft" id="btn-today">Aujourd'hui</button>
+        </div>
+      </div>
+      <div class="control search">
+        <label for="inp-search">Recherche</label>
+        <input type="search" id="inp-search" placeholder="Matière ou enseignant…" />
+      </div>
+    </section>
+
+    <section class="stats" id="stats" aria-live="polite">
+      <div class="stat"><span class="stat-value" id="st-cours">0</span><span class="stat-label">Cours</span></div>
+      <div class="stat"><span class="stat-value" id="st-salles">0</span><span class="stat-label">Salles allouées</span></div>
+      <div class="stat"><span class="stat-value" id="st-tc">0</span><span class="stat-label">Tronc commun</span></div>
+      <div class="stat highlight"><span class="stat-value" id="st-semaine">—</span><span class="stat-label">Semaine du</span></div>
+    </section>
+
+    <section class="toolbar">
+      <div class="toolbar-left">
+        <button type="button" class="btn primary" id="btn-allouer">Allouer les salles</button>
+        <button type="button" class="btn" id="btn-conflits">Vérifier conflits</button>
+        <button type="button" class="btn" id="btn-export">Exporter ZIP</button>
+        <button type="button" class="btn" id="btn-export-one">PDF filière</button>
+      </div>
+      <div class="toolbar-right">
+        <button type="button" class="btn soft" id="btn-copy">Copier semaine…</button>
+        <button type="button" class="btn danger-ghost" id="btn-reset">Réinitialiser</button>
+      </div>
+    </section>
+
+    <section class="schedule-wrap">
+      <div class="schedule" id="schedule" role="grid" aria-label="Emploi du temps"></div>
+      <p class="hint">Double-clic sur une case pour éditer · Entrée pour valider · Esc pour annuler</p>
+    </section>
+  </main>
+
+  <!-- Modal édition cours -->
+  <dialog class="modal" id="modal-cours">
+    <form method="dialog" id="form-cours">
+      <header>
+        <h2 id="modal-cours-title">Éditer le cours</h2>
+        <button type="button" class="icon-btn" data-close>×</button>
+      </header>
+      <div class="modal-body">
+        <p class="slot-label" id="slot-label"></p>
+        <label>Matière
+          <input list="list-matieres" id="cours-matiere" autocomplete="off" required />
+        </label>
+        <datalist id="list-matieres"></datalist>
+        <label>Enseignant
+          <input list="list-enseignants" id="cours-enseignant" autocomplete="off" required />
+        </label>
+        <datalist id="list-enseignants"></datalist>
+        <label class="check">
+          <input type="checkbox" id="cours-tc" />
+          Tronc commun (plusieurs filières)
+        </label>
+        <div id="tc-panel" class="tc-panel hidden">
+          <p class="muted">Sélectionnez les filières concernées</p>
+          <div id="tc-list"></div>
+        </div>
+        <div id="conflict-box" class="conflict hidden"></div>
+      </div>
+      <footer>
+        <button type="button" class="btn danger-ghost" id="btn-clear-slot">Vider</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn" data-close>Annuler</button>
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Modal salles -->
+  <dialog class="modal" id="modal-salles">
+    <form method="dialog">
+      <header>
+        <h2>Gestion des salles</h2>
+        <button type="button" class="icon-btn" data-close>×</button>
+      </header>
+      <div class="modal-body">
+        <div class="inline-form">
+          <input id="salle-nom" placeholder="Nom (ex. Amphi A)" />
+          <input id="salle-cap" type="number" min="1" placeholder="Capacité" />
+          <button type="button" class="btn primary" id="btn-add-salle">Ajouter</button>
+        </div>
+        <table class="data-table" id="table-salles">
+          <thead><tr><th>Nom</th><th>Capacité</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal effectifs -->
+  <dialog class="modal" id="modal-effectifs">
+    <form method="dialog">
+      <header>
+        <h2>Effectifs par filière</h2>
+        <button type="button" class="icon-btn" data-close>×</button>
+      </header>
+      <div class="modal-body">
+        <table class="data-table" id="table-effectifs">
+          <thead><tr><th>Filière</th><th>Effectif</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal filières -->
+  <dialog class="modal" id="modal-filieres">
+    <form method="dialog" id="form-filiere">
+      <header>
+        <h2>Filières</h2>
+        <button type="button" class="icon-btn" data-close>×</button>
+      </header>
+      <div class="modal-body">
+        <div class="inline-form wrap">
+          <input id="filiere-nom" placeholder="Nom de la filière" required />
+          <input id="filiere-eff" type="number" min="0" value="0" placeholder="Effectif" />
+          <button type="submit" class="btn primary">Ajouter</button>
+        </div>
+        <p class="muted">Ajoutée pour l'année / université sélectionnées dans la barre.</p>
+        <ul class="simple-list" id="list-filieres-manage"></ul>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal copier semaine -->
+  <dialog class="modal" id="modal-copy">
+    <form method="dialog" id="form-copy">
+      <header>
+        <h2>Copier une semaine</h2>
+        <button type="button" class="icon-btn" data-close>×</button>
+      </header>
+      <div class="modal-body">
+        <p class="muted">Copie les cours d'une semaine source vers la semaine affichée (remplace le contenu actuel).</p>
+        <label>Semaine source (lundi)
+          <input type="date" id="copy-source" required />
+        </label>
+      </div>
+      <footer>
+        <button type="button" class="btn" data-close>Annuler</button>
+        <button type="submit" class="btn primary">Copier</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Modal aide -->
+  <dialog class="modal" id="modal-help">
+    <form method="dialog">
+      <header>
+        <h2>Raccourcis & options</h2>
+        <button type="button" class="icon-btn" data-close>×</button>
+      </header>
+      <div class="modal-body help-grid">
+        <div>
+          <h3>Navigation</h3>
+          <ul>
+            <li><kbd>←</kbd> / <kbd>→</kbd> changer de semaine</li>
+            <li><kbd>T</kbd> semaine actuelle</li>
+            <li><kbd>/</kbd> focus recherche</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Planning</h3>
+          <ul>
+            <li>Double-clic : éditer un créneau</li>
+            <li>Sauvegarde auto à la validation</li>
+            <li>Allocation salles selon effectifs</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Options utiles</h3>
+          <ul>
+            <li>Copier une semaine précédente</li>
+            <li>Export PDF soigné (une filière) ou archive ZIP (toutes)</li>
+            <li>Vérification des conflits enseignants sur la semaine</li>
+            <li>Allocation des salles avec rapport d'échecs (best-fit)</li>
+            <li>Tronc commun multi-filières</li>
+            <li>Détection conflits enseignants</li>
+            <li>Recherche matière / enseignant</li>
+          </ul>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="/static/js/app.js" type="module"></script>
+</body>
+</html>
