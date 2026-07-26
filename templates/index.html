@@ -39,8 +39,8 @@
         <select id="sel-etab"></select>
       </div>
       <div class="control">
-        <label for="sel-type">Type</label>
-        <select id="sel-type"></select>
+        <label for="sel-type">Type <span class="muted" title="Indicateur d'affichage">(info)</span></label>
+        <select id="sel-type" title="Jour / Soir / En ligne — référence pour la préparation"></select>
       </div>
       <div class="control grow">
         <label for="sel-filiere">Filière</label>
@@ -70,8 +70,8 @@
 
     <section class="toolbar">
       <div class="toolbar-left">
-        <button type="button" class="btn primary" id="btn-save">Enregistrer</button>
-        <button type="button" class="btn" id="btn-allouer">Allouer les salles</button>
+        <button type="button" class="btn primary" id="btn-allouer">Allouer les salles</button>
+        <button type="button" class="btn" id="btn-conflits">Vérifier conflits</button>
         <button type="button" class="btn" id="btn-export">Exporter ZIP</button>
         <button type="button" class="btn" id="btn-export-one">PDF filière</button>
       </div>
@@ -228,6 +228,8 @@
           <ul>
             <li>Copier une semaine précédente</li>
             <li>Export PDF soigné (une filière) ou archive ZIP (toutes)</li>
+            <li>Vérification des conflits enseignants sur la semaine</li>
+            <li>Allocation des salles avec rapport d'échecs (best-fit)</li>
             <li>Tronc commun multi-filières</li>
             <li>Détection conflits enseignants</li>
             <li>Recherche matière / enseignant</li>

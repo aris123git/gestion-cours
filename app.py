@@ -14,7 +14,7 @@ from database import (
     get_grille_filiere, get_stats_semaine, copier_semaine, rechercher_conflits_enseignant,
     get_matieres_semaine, get_enseignants_pour_matiere, get_dernier_enseignant_filiere_matiere,
     get_tous_enseignants, get_toutes_matieres, get_etablissements, get_types_cours,
-    get_filieres_tc_groupe, get_salle_by_id,
+    get_filieres_tc_groupe, get_salle_by_id, sync_tronc_commun, rechercher_conflits_semaine,
 )
 from models import Cours
 from allocation import allouer_salles_par_jour, allouer_toute_la_semaine
@@ -30,10 +30,34 @@ app.config["JSON_AS_ASCII"] = False
 
 init_db()
 
+CRENEAU_IDS = {c[0] for c in CRENEAUX}
+
 
 def etab_id_from_name(nom):
     mapping = {"IST": 1, "UBS": 2}
     return mapping.get(nom, 1)
+
+
+def _json_body():
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def _as_int(value, default=None):
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _validate_slot(jour, creneau):
+    if jour not in JOURS:
+        return f"Jour invalide : {jour}"
+    if creneau not in CRENEAU_IDS:
+        return f"Créneau invalide : {creneau}"
+    return None
 
 
 @app.route("/")
@@ -80,13 +104,15 @@ def api_filieres():
 
 @app.route("/api/filieres", methods=["POST"])
 def api_ajouter_filiere():
-    data = request.get_json(force=True)
+    data = _json_body()
     nom = (data.get("nom") or "").strip()
     annee = data.get("annee") or "L1"
-    effectif = int(data.get("effectif") or 0)
+    effectif = _as_int(data.get("effectif"), 0)
     etab = data.get("etablissement") or "IST"
     if not nom:
         return jsonify({"error": "Nom requis"}), 400
+    if effectif is None or effectif < 0:
+        return jsonify({"error": "Effectif invalide"}), 400
     fid = ajouter_filiere(annee, nom, etab_id_from_name(etab))
     if not fid:
         return jsonify({"error": "Cette filière existe déjà"}), 409
@@ -120,24 +146,27 @@ def api_stats():
 
 @app.route("/api/cours", methods=["POST"])
 def api_sauver_cours():
-    data = request.get_json(force=True)
-    filiere_id = data.get("filiere_id")
+    data = _json_body()
+    filiere_id = _as_int(data.get("filiere_id"))
     date_lundi = data.get("date_lundi")
     jour = data.get("jour")
     creneau = data.get("creneau")
     matiere = (data.get("matiere") or "").strip()
     enseignant = (data.get("enseignant") or "").strip()
     filieres_tc = data.get("filieres_tc") or []
-    force = data.get("force", False)
+    force = bool(data.get("force", False))
+    clear_tc = bool(data.get("clear_tc_group", False))
 
     if not all([filiere_id, date_lundi, jour, creneau]):
         return jsonify({"error": "Champs manquants"}), 400
+    err = _validate_slot(jour, creneau)
+    if err:
+        return jsonify({"error": err}), 400
 
     if not matiere and not enseignant:
-        # vider le créneau
         existant = get_cours(filiere_id, date_lundi, jour, creneau)
         if existant:
-            supprimer_cours(existant.id)
+            supprimer_cours(existant.id, clear_tc_group=clear_tc or bool(existant.groupe_tc))
             allouer_salles_par_jour(date_lundi, jour)
         return jsonify({"ok": True, "deleted": True})
 
@@ -145,44 +174,66 @@ def api_sauver_cours():
         return jsonify({"error": "Matière et enseignant requis"}), 400
 
     existant = get_cours(filiere_id, date_lundi, jour, creneau)
+    try:
+        filieres_tc = [int(x) for x in filieres_tc]
+    except (TypeError, ValueError):
+        return jsonify({"error": "filieres_tc invalide"}), 400
+
     conflits = rechercher_conflits_enseignant(
         date_lundi, jour, creneau, enseignant,
         exclude_cours_id=existant.id if existant else None,
     )
-    # Ignorer les conflits dans le même groupe TC
     if filieres_tc:
-        conflits = [c for c in conflits if c["filiere_id"] not in filieres_tc and c["filiere_id"] != filiere_id]
+        ignore = set(filieres_tc) | {filiere_id}
+        conflits = [c for c in conflits if c["filiere_id"] not in ignore]
 
     if conflits and not force:
         return jsonify({"warning": "conflit_enseignant", "conflits": conflits}), 409
 
-    targets = list({filiere_id, *filieres_tc}) if filieres_tc else [filiere_id]
+    targets = list(dict.fromkeys([filiere_id, *filieres_tc]))
     groupe_tc = f"TC_{int(time.time())}" if len(targets) > 1 else None
 
-    ids = []
-    for fid in targets:
-        cours = get_cours(fid, date_lundi, jour, creneau)
-        if cours:
-            cours.matiere = matiere
-            cours.enseignant = enseignant
-            cours.groupe_tc = groupe_tc
-            sauvegarder_cours(cours)
-            ids.append(cours.id)
+    if len(targets) > 1:
+        ids = sync_tronc_commun(
+            date_lundi, jour, creneau, targets, matiere, enseignant, groupe_tc
+        )
+    else:
+        # Retirer d'un éventuel ancien TC
+        if existant and existant.groupe_tc:
+            sync_tronc_commun(
+                date_lundi, jour, creneau, [filiere_id], matiere, enseignant, None
+            )
+            ids = [get_cours(filiere_id, date_lundi, jour, creneau).id]
         else:
-            nouveau = Cours(None, fid, date_lundi, jour, creneau, matiere, enseignant, None, groupe_tc)
-            cid = sauvegarder_cours(nouveau)
-            ids.append(cid)
+            if existant:
+                existant.matiere = matiere
+                existant.enseignant = enseignant
+                existant.groupe_tc = None
+                sauvegarder_cours(existant)
+                ids = [existant.id]
+            else:
+                nouveau = Cours(None, filiere_id, date_lundi, jour, creneau, matiere, enseignant, None, None)
+                ids = [sauvegarder_cours(nouveau)]
 
-    allouer_salles_par_jour(date_lundi, jour)
+    _, alloc = allouer_salles_par_jour(date_lundi, jour)
     grille = get_grille_filiere(filiere_id, date_lundi)
-    return jsonify({"ok": True, "ids": ids, "grille": grille, "stats": get_stats_semaine(date_lundi, filiere_id)})
+    return jsonify({
+        "ok": True,
+        "ids": ids,
+        "grille": grille,
+        "stats": get_stats_semaine(date_lundi, filiere_id),
+        "allocation": alloc,
+    })
 
 
 @app.route("/api/cours/<int:cours_id>", methods=["DELETE"])
 def api_delete_cours(cours_id):
     date_lundi = request.args.get("date_lundi")
     jour = request.args.get("jour")
-    supprimer_cours(cours_id)
+    clear_tc = request.args.get("clear_tc", "1") != "0"
+    ok = supprimer_cours(cours_id, clear_tc_group=clear_tc)
+    if not ok:
+        return jsonify({"error": "Cours introuvable"}), 404
     if date_lundi and jour:
         allouer_salles_par_jour(date_lundi, jour)
     return jsonify({"ok": True})
@@ -230,10 +281,10 @@ def api_salles():
 
 @app.route("/api/salles", methods=["POST"])
 def api_ajouter_salle():
-    data = request.get_json(force=True)
+    data = _json_body()
     nom = (data.get("nom") or "").strip()
-    capacite = int(data.get("capacite") or 0)
-    if not nom or capacite <= 0:
+    capacite = _as_int(data.get("capacite"), 0)
+    if not nom or capacite is None or capacite <= 0:
         return jsonify({"error": "Nom et capacité valides requis"}), 400
     sid = ajouter_salle(nom, capacite)
     if not sid:
@@ -243,13 +294,13 @@ def api_ajouter_salle():
 
 @app.route("/api/salles/<int:salle_id>", methods=["PUT"])
 def api_modifier_salle(salle_id):
-    data = request.get_json(force=True)
+    data = _json_body()
     nom = (data.get("nom") or "").strip()
-    capacite = int(data.get("capacite") or 0)
-    if not nom or capacite <= 0:
+    capacite = _as_int(data.get("capacite"), 0)
+    if not nom or capacite is None or capacite <= 0:
         return jsonify({"error": "Nom et capacité valides requis"}), 400
     if not modifier_salle(salle_id, nom, capacite):
-        return jsonify({"error": "Nom déjà utilisé"}), 409
+        return jsonify({"error": "Salle introuvable ou nom déjà utilisé"}), 409
     return jsonify({"ok": True})
 
 
@@ -261,12 +312,14 @@ def api_supprimer_salle(salle_id):
 
 @app.route("/api/effectifs")
 def api_effectifs():
-    filieres = get_filieres()
+    etab = request.args.get("etablissement") or None
+    filieres = get_filieres(etablissement=etab)
     return jsonify([
         {
             "id": f.id,
             "annee": f.annee,
             "nom": f.nom,
+            "etablissement": f.etablissement,
             "effectif": get_effectif(ANNEE_COURANTE, f.id),
         }
         for f in filieres
@@ -275,29 +328,55 @@ def api_effectifs():
 
 @app.route("/api/effectifs/<int:filiere_id>", methods=["PUT"])
 def api_set_effectif(filiere_id):
-    data = request.get_json(force=True)
-    effectif = int(data.get("effectif") or 0)
+    data = _json_body()
+    effectif = _as_int(data.get("effectif"))
+    if effectif is None or effectif < 0:
+        return jsonify({"error": "Effectif invalide"}), 400
+    if not get_filiere_by_id_safe(filiere_id):
+        return jsonify({"error": "Filière introuvable"}), 404
     set_effectif(ANNEE_COURANTE, filiere_id, effectif)
     return jsonify({"ok": True})
 
 
+def get_filiere_by_id_safe(filiere_id):
+    from database import get_filiere_by_id
+    return get_filiere_by_id(filiere_id)
+
+
 @app.route("/api/allouer", methods=["POST"])
 def api_allouer():
-    data = request.get_json(force=True)
+    data = _json_body()
     date_lundi = data.get("date_lundi") or get_lundi_week_courante()
-    allouer_toute_la_semaine(date_lundi)
-    filiere_id = data.get("filiere_id")
-    payload = {"ok": True}
+    rapport = allouer_toute_la_semaine(date_lundi)
+    filiere_id = _as_int(data.get("filiere_id"))
+    payload = {
+        "ok": True,
+        "rapport": rapport,
+        "message": (
+            f"{rapport['assigned']} salle(s) allouée(s)"
+            + (f", {len(rapport['failed'])} échec(s)" if rapport["failed"] else "")
+        ),
+    }
     if filiere_id:
         payload["grille"] = get_grille_filiere(filiere_id, date_lundi)
         payload["stats"] = get_stats_semaine(date_lundi, filiere_id)
     return jsonify(payload)
 
 
+@app.route("/api/conflits")
+def api_conflits():
+    date_lundi = request.args.get("date_lundi") or get_lundi_week_courante()
+    filiere_id = request.args.get("filiere_id", type=int)
+    return jsonify({
+        "date_lundi": date_lundi,
+        "conflits": rechercher_conflits_semaine(date_lundi, filiere_id),
+    })
+
+
 @app.route("/api/reinitialiser", methods=["POST"])
 def api_reinitialiser():
-    data = request.get_json(force=True)
-    filiere_id = data.get("filiere_id")
+    data = _json_body()
+    filiere_id = _as_int(data.get("filiere_id"))
     date_lundi = data.get("date_lundi")
     if not filiere_id or not date_lundi:
         return jsonify({"error": "Paramètres manquants"}), 400
@@ -309,8 +388,8 @@ def api_reinitialiser():
 
 @app.route("/api/copier-semaine", methods=["POST"])
 def api_copier_semaine():
-    data = request.get_json(force=True)
-    filiere_id = data.get("filiere_id")
+    data = _json_body()
+    filiere_id = _as_int(data.get("filiere_id"))
     date_source = data.get("date_source")
     date_cible = data.get("date_cible")
     if not all([filiere_id, date_source, date_cible]):
@@ -329,10 +408,10 @@ def api_copier_semaine():
 
 @app.route("/api/export-pdf", methods=["POST"])
 def api_export_pdf():
-    data = request.get_json(force=True) or {}
+    data = _json_body()
     date_lundi = data.get("date_lundi") or get_lundi_week_courante()
     mode = data.get("mode", "all")  # all | one | zip
-    filiere_id = data.get("filiere_id")
+    filiere_id = _as_int(data.get("filiere_id"))
     etablissement = data.get("etablissement") or None
 
     if mode == "one":
@@ -347,7 +426,7 @@ def api_export_pdf():
         zip_path, resultats = export_all_filieres_zip(
             date_lundi, etablissement=etablissement
         )
-        if not zip_path or not resultats:
+        if not zip_path:
             return jsonify({"error": "Aucun PDF à exporter"}), 404
         return send_file(
             zip_path,

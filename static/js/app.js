@@ -123,10 +123,8 @@ function wireEvents() {
 
   $("#inp-search").addEventListener("input", () => renderGrille());
 
-  $("#btn-save").addEventListener("click", () => {
-    toast("Les créneaux s'enregistrent à la validation de chaque case.");
-  });
   $("#btn-allouer").addEventListener("click", allouerSalles);
+  $("#btn-conflits").addEventListener("click", verifierConflits);
   $("#btn-export").addEventListener("click", () => exportPdf("all"));
   $("#btn-export-one").addEventListener("click", () => exportPdf("one"));
   $("#btn-reset").addEventListener("click", resetSemaine);
@@ -337,7 +335,10 @@ async function loadEnseignants() {
 }
 
 async function populateTcList(cours) {
-  const all = await api("/api/filieres");
+  const etab = $("#sel-etab")?.value || "";
+  const all = await api(
+    `/api/filieres?etablissement=${encodeURIComponent(etab)}`
+  );
   let selected = [];
   if (cours?.groupe_tc) {
     const info = await api(
@@ -467,49 +468,98 @@ async function clearSlot() {
 }
 
 async function allouerSalles() {
-  if (!state.filiereId) return;
-  const data = await api("/api/allouer", {
-    method: "POST",
-    body: JSON.stringify({ date_lundi: state.dateLundi, filiere_id: state.filiereId }),
-  });
-  state.grille = data.grille;
-  state.stats = data.stats;
-  updateStats(state.stats);
-  renderGrille();
-  toast("Salles allouées");
+  if (!state.filiereId) {
+    toast("Sélectionnez une filière", "warn");
+    return;
+  }
+  try {
+    const data = await api("/api/allouer", {
+      method: "POST",
+      body: JSON.stringify({ date_lundi: state.dateLundi, filiere_id: state.filiereId }),
+    });
+    state.grille = data.grille;
+    state.stats = data.stats;
+    updateStats(state.stats);
+    renderGrille();
+    const failed = data.rapport?.failed?.length || 0;
+    if (failed) {
+      const reasons = [...new Set(data.rapport.failed.map((f) => f.reason))].join(" · ");
+      toast(`${data.message || "Allocation partielle"} — ${reasons}`, "warn");
+    } else {
+      toast(data.message || "Salles allouées");
+    }
+  } catch (err) {
+    toast(err.message || "Allocation échouée", "error");
+  }
+}
+
+async function verifierConflits() {
+  try {
+    const q = state.filiereId ? `&filiere_id=${state.filiereId}` : "";
+    const data = await api(`/api/conflits?date_lundi=${state.dateLundi}${q}`);
+    const n = data.conflits?.length || 0;
+    if (!n) {
+      toast("Aucun conflit enseignant cette semaine");
+      return;
+    }
+    const lines = data.conflits
+      .slice(0, 8)
+      .map((c) => `${c.jour} ${c.creneau} — ${c.enseignant} (${c.cours.length} cours)`)
+      .join("\n");
+    alert(`${n} conflit(s) enseignant(s) :\n\n${lines}`);
+    toast(`${n} conflit(s) détecté(s)`, "warn");
+  } catch (err) {
+    toast(err.message || "Vérification impossible", "error");
+  }
 }
 
 async function resetSemaine() {
   if (!state.filiereId) return;
   if (!confirm("Supprimer tous les cours de cette semaine pour la filière ?")) return;
-  const data = await api("/api/reinitialiser", {
-    method: "POST",
-    body: JSON.stringify({ filiere_id: state.filiereId, date_lundi: state.dateLundi }),
-  });
-  state.grille = data.grille;
-  state.stats = data.stats;
-  updateStats(state.stats);
-  renderGrille();
-  toast("Semaine réinitialisée");
+  try {
+    const data = await api("/api/reinitialiser", {
+      method: "POST",
+      body: JSON.stringify({ filiere_id: state.filiereId, date_lundi: state.dateLundi }),
+    });
+    state.grille = data.grille;
+    state.stats = data.stats;
+    updateStats(state.stats);
+    renderGrille();
+    toast("Semaine réinitialisée");
+  } catch (err) {
+    toast(err.message || "Réinitialisation échouée", "error");
+  }
 }
 
 async function copySemaine(e) {
   e.preventDefault();
-  const source = toMonday($("#copy-source").value);
-  const data = await api("/api/copier-semaine", {
-    method: "POST",
-    body: JSON.stringify({
-      filiere_id: state.filiereId,
-      date_source: source,
-      date_cible: state.dateLundi,
-    }),
-  });
-  state.grille = data.grille;
-  state.stats = data.stats;
-  updateStats(state.stats);
-  renderGrille();
-  closeModal($("#modal-copy"));
-  toast(`${data.copied} cours copiés`);
+  if (!state.filiereId) {
+    toast("Sélectionnez une filière", "warn");
+    return;
+  }
+  try {
+    const source = toMonday($("#copy-source").value);
+    const data = await api("/api/copier-semaine", {
+      method: "POST",
+      body: JSON.stringify({
+        filiere_id: state.filiereId,
+        date_source: source,
+        date_cible: state.dateLundi,
+      }),
+    });
+    state.grille = data.grille;
+    state.stats = data.stats;
+    updateStats(state.stats);
+    renderGrille();
+    closeModal($("#modal-copy"));
+    if (!data.copied) {
+      toast("Aucun cours à copier depuis cette semaine", "warn");
+    } else {
+      toast(`${data.copied} cours copiés`);
+    }
+  } catch (err) {
+    toast(err.message || "Copie échouée", "error");
+  }
 }
 
 async function exportPdf(mode) {
@@ -574,6 +624,10 @@ async function openSalles() {
 async function refreshSalles() {
   const salles = await api("/api/salles");
   const tbody = $("#table-salles tbody");
+  if (!salles.length) {
+    tbody.innerHTML = `<tr><td colspan="3" class="muted">Aucune salle — ajoutez-en pour l'allocation automatique.</td></tr>`;
+    return;
+  }
   tbody.innerHTML = salles
     .map(
       (s) => `<tr>
@@ -586,9 +640,13 @@ async function refreshSalles() {
   $$("[data-del-salle]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!confirm("Supprimer cette salle ?")) return;
-      await api(`/api/salles/${btn.dataset.delSalle}`, { method: "DELETE" });
-      await refreshSalles();
-      toast("Salle supprimée");
+      try {
+        await api(`/api/salles/${btn.dataset.delSalle}`, { method: "DELETE" });
+        await refreshSalles();
+        toast("Salle supprimée");
+      } catch (err) {
+        toast(err.message || "Suppression échouée", "error");
+      }
     });
   });
 }

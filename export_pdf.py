@@ -451,9 +451,18 @@ def export_all_filieres_zip(
     zip_name = _safe_filename(f"EDT_{date_lundi}{suffix}.zip")
     zip_path = os.path.join(semaine_dir, zip_name)
 
+    written = 0
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for f, ok, path in resultats:
             if ok and path and os.path.isfile(path):
                 zf.write(path, arcname=os.path.basename(path))
+                written += 1
+
+    if written == 0:
+        try:
+            os.remove(zip_path)
+        except OSError:
+            pass
+        return None, resultats
 
     return zip_path, resultats
