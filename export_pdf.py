@@ -22,7 +22,14 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from config import ANNEE_COURANTE, CRENEAUX, CRENEAUX_LABELS, EXPORT_DIR, JOURS
+from config import (
+    ANNEE_COURANTE,
+    CRENEAUX,
+    CRENEAUX_LABELS,
+    EXPORT_DIR,
+    JOURS,
+    RESOURCE_DIR,
+)
 from database import get_cours, get_effectif, get_filiere_by_id, get_salle_by_id
 
 # Palette alignée sur static/css/app.css
@@ -37,9 +44,8 @@ CREAM = colors.HexColor("#fffdf9")
 PARCHMENT = colors.HexColor("#f3efe6")
 LINE = colors.HexColor("#c9d5cf")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FONTS_DIR = os.path.join(BASE_DIR, "static", "fonts")
-DEFAULT_LOGO = os.path.join(BASE_DIR, "fichiers", "logoist.jpeg")
+FONTS_DIR = os.path.join(RESOURCE_DIR, "static", "fonts")
+DEFAULT_LOGO = os.path.join(RESOURCE_DIR, "fichiers", "logoist.jpeg")
 
 _FONTS_READY = False
 FONT_BODY = "Helvetica"
@@ -82,7 +88,7 @@ def _default_logo(logo_path=None):
         return logo_path
     if os.path.exists(DEFAULT_LOGO):
         return DEFAULT_LOGO
-    alt = os.path.join(BASE_DIR, "static", "img", "logo.jpeg")
+    alt = os.path.join(RESOURCE_DIR, "static", "img", "logo.jpeg")
     return alt if os.path.exists(alt) else None
 
 

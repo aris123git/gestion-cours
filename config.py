@@ -1,6 +1,23 @@
 import os
+import sys
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def resource_dir():
+    """Dossier des ressources empaquetées (templates, static, logos)."""
+    if getattr(sys, "frozen", False):
+        return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def app_dir():
+    """Dossier writable (à côté du .exe) pour la base et les exports."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+BASE_DIR = app_dir()
+RESOURCE_DIR = resource_dir()
 DB_PATH = os.path.join(BASE_DIR, "gestion_cours.db")
 EXPORT_DIR = os.path.join(BASE_DIR, "exports")
 

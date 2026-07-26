@@ -17,6 +17,29 @@ Ouvrez ensuite [http://127.0.0.1:5000](http://127.0.0.1:5000).
 python main.py --desktop
 ```
 
+## Créer un `.exe` Windows
+
+À faire **sur Windows**, dans le dossier du projet (branche avec `requirements.txt`, `templates/`, `static/`) :
+
+```bat
+build_exe.bat
+```
+
+Ou manuellement :
+
+```bat
+pip install -r requirements.txt pyinstaller
+pyinstaller GestionCours.spec
+```
+
+Puis lancez `dist\GestionCours.exe` :
+- une console s’ouvre (ne la fermez pas)
+- le navigateur s’ouvre sur http://127.0.0.1:5000
+
+Si ça échoue : lisez le texte dans la console, ou le fichier `gestioncours-error.log` à côté du `.exe`.
+
+> Le `.exe` ne peut pas être généré depuis Linux/macOS. Windows Defender peut parfois bloquer un nouvel exécutable PyInstaller — autorisez-le si demandé.
+
 ## Fonctionnalités
 
 - Emploi du temps hebdomadaire par filière / année / université

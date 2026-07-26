@@ -6,7 +6,7 @@ import os
 import time
 from flask import Flask, render_template, request, jsonify, send_file
 
-from config import JOURS, CRENEAUX, CRENEAUX_LABELS, ANNEE_COURANTE
+from config import JOURS, CRENEAUX, CRENEAUX_LABELS, ANNEE_COURANTE, RESOURCE_DIR
 from database import (
     init_db, get_filieres, get_filieres_avec_effectif, ajouter_filiere, supprimer_filiere,
     set_effectif, get_effectif, get_salles, ajouter_salle, supprimer_salle, modifier_salle,
@@ -21,7 +21,11 @@ from allocation import allouer_salles_par_jour, allouer_toute_la_semaine
 from export_pdf import export_all_filieres, export_all_filieres_zip, export_une_filiere
 from utils import get_lundi_week_courante, get_semaine_precedente, get_semaine_suivante, format_date_fr
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=os.path.join(RESOURCE_DIR, "templates"),
+    static_folder=os.path.join(RESOURCE_DIR, "static"),
+)
 app.config["JSON_AS_ASCII"] = False
 
 init_db()
