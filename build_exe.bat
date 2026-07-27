@@ -22,7 +22,8 @@ if errorlevel 1 (
 
 echo.
 echo OK : dist\GestionCours.exe
-echo Double-cliquez dessus. Une console s'ouvre + le navigateur sur http://127.0.0.1:5000
-echo En cas d'erreur, lisez la console ou le fichier gestioncours-error.log a cote du .exe
+echo Double-cliquez dessus : le navigateur s'ouvre (pas de terminal noir).
+echo Une petite fenetre "GestionCours est en cours" reste ouverte — fermez-la pour quitter.
+echo En cas d'erreur : gestioncours-error.log a cote du .exe
 echo.
 pause

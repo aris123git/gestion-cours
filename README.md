@@ -40,10 +40,10 @@ pyinstaller GestionCours.spec
 ```
 
 Puis lancez `dist\GestionCours.exe` :
-- une console s’ouvre (ne la fermez pas)
-- le navigateur s’ouvre sur http://127.0.0.1:5000
+- le navigateur s’ouvre sur http://127.0.0.1:5000 (pas de terminal noir)
+- une petite fenêtre « GestionCours est en cours » reste ouverte — fermez-la pour quitter
 
-Si ça échoue : lisez le texte dans la console, ou le fichier `gestioncours-error.log` à côté du `.exe`.
+Si ça échoue : le fichier `gestioncours-error.log` à côté du `.exe`.
 
 > Le `.exe` ne peut pas être généré depuis Linux/macOS. Windows Defender peut parfois bloquer un nouvel exécutable PyInstaller — autorisez-le si demandé.
 
