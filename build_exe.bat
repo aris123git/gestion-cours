@@ -22,8 +22,7 @@ if errorlevel 1 (
 
 echo.
 echo OK : dist\GestionCours.exe
-echo Double-cliquez dessus : le navigateur s'ouvre (pas de terminal noir).
-echo Une petite fenetre "GestionCours est en cours" reste ouverte — fermez-la pour quitter.
-echo En cas d'erreur : gestioncours-error.log a cote du .exe
+echo Double-cliquez : le navigateur s'ouvre quand le serveur est pret.
+echo La petite fenetre se minimise toute seule — restaurez-la pour Quitter.
 echo.
 pause

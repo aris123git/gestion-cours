@@ -54,16 +54,38 @@ function formatFr(iso) {
 }
 
 function openModal(id) {
-  $(id).showModal();
+  const el = typeof id === "string" ? $(id) : id;
+  if (!el) {
+    toast("Fenêtre introuvable", "error");
+    return;
+  }
+  try {
+    if (typeof el.showModal === "function") {
+      if (!el.open) el.showModal();
+    } else {
+      el.setAttribute("open", "");
+    }
+  } catch (err) {
+    console.error(err);
+    toast("Impossible d'ouvrir la fenêtre", "error");
+  }
 }
 
 function closeModal(dialog) {
-  dialog.close();
+  if (!dialog) return;
+  try {
+    dialog.close();
+  } catch (_) {
+    dialog.removeAttribute("open");
+  }
 }
 
 function bindCloseButtons() {
   $$("[data-close]").forEach((btn) => {
-    btn.addEventListener("click", () => closeModal(btn.closest("dialog")));
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeModal(btn.closest("dialog"));
+    });
   });
   $$("dialog").forEach((dlg) => {
     dlg.addEventListener("click", (e) => {
@@ -74,7 +96,17 @@ function bindCloseButtons() {
 
 async function init() {
   bindCloseButtons();
-  state.meta = await api("/api/meta");
+  // Brancher les boutons immédiatement (même si l'API met du temps)
+  wireEvents();
+
+  try {
+    state.meta = await api("/api/meta");
+  } catch (err) {
+    console.error(err);
+    toast("Serveur inaccessible — rechargez la page", "error");
+    return;
+  }
+
   state.dateLundi = state.meta.semaine_courante;
 
   const annee = $("#sel-annee");
@@ -94,7 +126,6 @@ async function init() {
   $("#inp-semaine").value = state.dateLundi;
   $("#st-semaine").textContent = formatFr(state.dateLundi);
 
-  wireEvents();
   await loadFilieres();
   buildScheduleSkeleton();
   await loadGrille();
@@ -617,8 +648,60 @@ async function exportPdf(mode) {
 }
 
 async function openSalles() {
-  await refreshSalles();
-  openModal("#modal-salles");
+  try {
+    openModal("#modal-salles");
+    await refreshSalles();
+  } catch (err) {
+    toast(err.message || "Impossible d'ouvrir les salles", "error");
+  }
+}
+
+async function openEffectifs() {
+  try {
+    openModal("#modal-effectifs");
+    const etab = $("#sel-etab")?.value || "";
+    const rows = await api(`/api/effectifs?etablissement=${encodeURIComponent(etab)}`);
+    const tbody = $("#table-effectifs tbody");
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="muted">Aucune filière</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows
+      .map(
+        (r) => `<tr>
+      <td>${escapeHtml(r.annee + " — " + r.nom)}</td>
+      <td><input type="number" min="0" value="${r.effectif}" data-eff="${r.id}" style="width:6rem" /></td>
+      <td><button type="button" class="btn soft" data-save-eff="${r.id}">OK</button></td>
+    </tr>`
+      )
+      .join("");
+    $$("[data-save-eff]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const input = $(`[data-eff="${btn.dataset.saveEff}"]`);
+        try {
+          await api(`/api/effectifs/${btn.dataset.saveEff}`, {
+            method: "PUT",
+            body: JSON.stringify({ effectif: Number(input.value) }),
+          });
+          toast("Effectif mis à jour");
+          await loadFilieres();
+        } catch (err) {
+          toast(err.message || "Erreur", "error");
+        }
+      });
+    });
+  } catch (err) {
+    toast(err.message || "Impossible d'ouvrir les effectifs", "error");
+  }
+}
+
+async function openFilieres() {
+  try {
+    openModal("#modal-filieres");
+    await refreshFilieresManage();
+  } catch (err) {
+    toast(err.message || "Impossible d'ouvrir les filières", "error");
+  }
 }
 
 async function refreshSalles() {
@@ -665,37 +748,6 @@ async function addSalle() {
   }
 }
 
-async function openEffectifs() {
-  const rows = await api("/api/effectifs");
-  const tbody = $("#table-effectifs tbody");
-  tbody.innerHTML = rows
-    .map(
-      (r) => `<tr>
-      <td>${escapeHtml(r.annee + " — " + r.nom)}</td>
-      <td><input type="number" min="0" value="${r.effectif}" data-eff="${r.id}" style="width:6rem" /></td>
-      <td><button type="button" class="btn soft" data-save-eff="${r.id}">OK</button></td>
-    </tr>`
-    )
-    .join("");
-  $$("[data-save-eff]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const input = $(`[data-eff="${btn.dataset.saveEff}"]`);
-      await api(`/api/effectifs/${btn.dataset.saveEff}`, {
-        method: "PUT",
-        body: JSON.stringify({ effectif: Number(input.value) }),
-      });
-      toast("Effectif mis à jour");
-      await loadFilieres();
-    });
-  });
-  openModal("#modal-effectifs");
-}
-
-async function openFilieres() {
-  await refreshFilieresManage();
-  openModal("#modal-filieres");
-}
-
 async function refreshFilieresManage() {
   const annee = $("#sel-annee").value;
   const etab = $("#sel-etab").value;
@@ -712,10 +764,14 @@ async function refreshFilieresManage() {
   $$("[data-del-f]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!confirm("Supprimer cette filière et ses cours ?")) return;
-      await api(`/api/filieres/${btn.dataset.delF}`, { method: "DELETE" });
-      await refreshFilieresManage();
-      await loadFilieres();
-      toast("Filière supprimée");
+      try {
+        await api(`/api/filieres/${btn.dataset.delF}`, { method: "DELETE" });
+        await refreshFilieresManage();
+        await loadFilieres();
+        toast("Filière supprimée");
+      } catch (err) {
+        toast(err.message || "Suppression échouée", "error");
+      }
     });
   });
 }

@@ -4,14 +4,17 @@ GestionCours — lanceur.
 Par défaut : interface web moderne (Flask).
 Pour l'ancienne interface Tkinter : python main.py --desktop
 
-Sous Windows, double-cliquer GestionCours.exe lance le web et ouvre le navigateur
-(sans fenêtre de terminal). Une petite fenêtre « En cours » permet de quitter.
+Sous Windows, double-cliquer GestionCours.exe lance le serveur local,
+attend qu'il soit prêt, ouvre le navigateur, puis réduit la fenêtre de statut.
 """
 import argparse
 import os
 import sys
 import threading
+import time
 import traceback
+import urllib.error
+import urllib.request
 import webbrowser
 
 
@@ -45,75 +48,139 @@ def _show_error(message):
         print(message, file=sys.stderr)
 
 
+def _wait_server(base_url, timeout=20):
+    """Attend que Flask réponde avant d'ouvrir le navigateur."""
+    deadline = time.time() + timeout
+    last_err = None
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(base_url + "/api/meta", timeout=1) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception as exc:
+            last_err = exc
+            time.sleep(0.25)
+    raise RuntimeError(f"Le serveur n'a pas démarré à temps ({base_url}). {last_err}")
+
+
+def _find_free_port(host, preferred=5000, tries=15):
+    import socket
+
+    for port in range(preferred, preferred + tries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((host, port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError("Aucun port libre pour démarrer GestionCours")
+
+
 def _status_window(url):
-    """Petite fenêtre pour garder l'app vivante et permettre de quitter."""
+    """Fenêtre de statut (coin bas-droit), sans rester au-dessus du navigateur."""
     import tkinter as tk
 
     root = tk.Tk()
     root.title("GestionCours")
     root.resizable(False, False)
-    root.attributes("-topmost", True)
+    # Ne PAS forcer topmost : ça bloquait le navigateur
+    try:
+        root.attributes("-topmost", False)
+    except Exception:
+        pass
 
-    frame = tk.Frame(root, padx=18, pady=14)
+    frame = tk.Frame(root, padx=16, pady=12)
     frame.pack()
+    status = tk.StringVar(value="Serveur démarré")
     tk.Label(
         frame,
-        text="GestionCours est en cours",
+        text="GestionCours",
         font=("Segoe UI", 11, "bold"),
     ).pack(anchor="w")
+    tk.Label(frame, textvariable=status, font=("Segoe UI", 9), justify="left").pack(
+        anchor="w", pady=(4, 8)
+    )
     tk.Label(
         frame,
-        text=f"Interface : {url}\nFermez cette fenêtre pour quitter.",
-        font=("Segoe UI", 9),
-        justify="left",
-    ).pack(anchor="w", pady=(6, 10))
+        text=url,
+        font=("Segoe UI", 8),
+        fg="#333",
+    ).pack(anchor="w")
 
     btn_row = tk.Frame(frame)
-    btn_row.pack(fill="x")
-    tk.Button(
-        btn_row,
-        text="Ouvrir le navigateur",
-        command=lambda: webbrowser.open(url),
-    ).pack(side="left", padx=(0, 8))
+    btn_row.pack(fill="x", pady=(10, 0))
+
+    def open_ui():
+        webbrowser.open(url)
+
+    tk.Button(btn_row, text="Ouvrir l'interface", command=open_ui).pack(
+        side="left", padx=(0, 8)
+    )
     tk.Button(btn_row, text="Quitter", command=root.destroy).pack(side="left")
 
-    # Centrer légèrement
     root.update_idletasks()
-    w, h = root.winfo_width(), root.winfo_height()
-    x = (root.winfo_screenwidth() - w) // 2
-    y = (root.winfo_screenheight() - h) // 3
-    root.geometry(f"+{x}+{y}")
+    w, h = max(root.winfo_width(), 280), max(root.winfo_height(), 120)
+    x = max(20, root.winfo_screenwidth() - w - 24)
+    y = max(20, root.winfo_screenheight() - h - 60)
+    root.geometry(f"{w}x{h}+{x}+{y}")
 
-    def on_close():
-        root.destroy()
+    # Après ouverture navigateur : réduire dans la barre des tâches
+    def iconify_later():
+        try:
+            root.iconify()
+            status.set("En cours (réduire / restaurer depuis la barre des tâches)")
+        except Exception:
+            pass
 
-    root.protocol("WM_DELETE_WINDOW", on_close)
+    root.after(1500, iconify_later)
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
     root.mainloop()
-    # Fermer la fenêtre = arrêter le process (serveur inclus)
     os._exit(0)
 
 
-def run_web(host="127.0.0.1", port=5000, debug=False, open_browser=True, status_ui=None):
+def run_web(host="127.0.0.1", port=None, debug=False, open_browser=True, status_ui=None):
     from app import app
 
+    if port is None:
+        port = _find_free_port(host, 5000)
     url = f"http://127.0.0.1:{port}"
     if status_ui is None:
         status_ui = _is_frozen()
 
-    if open_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    ready = {"ok": False, "error": None}
+
+    def serve():
+        try:
+            app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
+        except Exception as exc:
+            ready["error"] = exc
 
     if status_ui:
-        threading.Thread(
-            target=lambda: app.run(host=host, port=port, debug=False, use_reloader=False),
-            daemon=True,
-        ).start()
+        threading.Thread(target=serve, daemon=True).start()
+        try:
+            _wait_server(url)
+            ready["ok"] = True
+        except Exception as exc:
+            _show_error(str(exc))
+            sys.exit(1)
+        if open_browser:
+            webbrowser.open(url)
         _status_window(url)
         return
 
     print(f"GestionCours — {url}")
     print("Laissez cette fenêtre ouverte. Fermez-la pour quitter.")
-    app.run(host=host, port=port, debug=debug, use_reloader=False)
+    if open_browser:
+        def _open():
+            try:
+                _wait_server(url)
+                webbrowser.open(url)
+            except Exception:
+                pass
+
+        threading.Thread(target=_open, daemon=True).start()
+    app.run(host=host, port=port, debug=debug, use_reloader=False, threaded=True)
 
 
 def run_desktop():
@@ -126,10 +193,9 @@ def run_desktop():
 
 
 def main():
-    # Double-clic .exe : pas d'arguments → web + navigateur + fenêtre statut
     if _is_frozen() and len(sys.argv) == 1:
         try:
-            run_web(host="127.0.0.1", port=5000, debug=False, open_browser=True, status_ui=True)
+            run_web(host="127.0.0.1", debug=False, open_browser=True, status_ui=True)
         except Exception:
             _show_error(traceback.format_exc())
             sys.exit(1)
@@ -138,7 +204,7 @@ def main():
     parser = argparse.ArgumentParser(description="Gestion des cours universitaires")
     parser.add_argument("--desktop", action="store_true", help="Lancer l'interface Tkinter")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--no-debug", action="store_true")
     parser.add_argument("--no-browser", action="store_true", help="Ne pas ouvrir le navigateur")
     parser.add_argument(

@@ -416,6 +416,7 @@ input:focus {
   background: var(--surface-solid);
   box-shadow: var(--shadow);
   color: var(--ink);
+  z-index: 100;
 }
 
 .modal::backdrop {
