@@ -438,8 +438,13 @@ class PlanningApp:
             print(f"Logo non trouvé : {logo_path}")
             logo_path = None
         etablissement = self.current_etablissement.get() or None
+        type_cours = self.current_type_cours.get() or None
         resultats = export_all_filieres(
-            date_lundi, ANNEE_COURANTE, logo_path, etablissement=etablissement
+            date_lundi,
+            ANNEE_COURANTE,
+            logo_path,
+            etablissement=etablissement,
+            type_cours=type_cours,
         )
         nb_ok = sum(1 for item in resultats if item[1])
         messagebox.showinfo("Export", f"Export terminé : {nb_ok} PDF générés")

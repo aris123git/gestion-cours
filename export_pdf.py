@@ -30,7 +30,13 @@ from config import (
     JOURS,
     RESOURCE_DIR,
 )
-from database import get_cours, get_effectif, get_filiere_by_id, get_salle_by_id
+from database import (
+    get_cours,
+    get_effectif,
+    get_filiere_by_id,
+    get_filieres_tc_groupe,
+    get_salle_by_id,
+)
 
 # Palette alignée sur static/css/app.css
 BRAND = colors.HexColor("#0f4c3a")
@@ -170,7 +176,31 @@ def _build_styles():
     }
 
 
-def _cell_content(cours, styles):
+EXPORT_NOTES = (
+    "NB : Ce programme peut subir des modifications en cours de semaine !",
+    "Les salles dont les numéros se terminent par la lettre B se situent en haut "
+    "de l'immeuble BOA et C pour le 2è bâtiment à côté de BOA 1er niveau",
+)
+
+
+def _tc_autres_filieres(cours, filiere_id):
+    """Noms des autres filières partageant le même tronc commun."""
+    if not cours or not cours.groupe_tc:
+        return []
+    ids = get_filieres_tc_groupe(
+        cours.groupe_tc, cours.date_lundi, cours.jour, cours.creneau
+    )
+    labels = []
+    for fid in ids:
+        if fid == filiere_id:
+            continue
+        f = get_filiere_by_id(fid)
+        if f:
+            labels.append(f"{f.annee} {f.nom}")
+    return labels
+
+
+def _cell_content(cours, styles, filiere_id=None):
     if not cours or not (cours.matiere or "").strip():
         return Paragraph("—", styles["empty"])
 
@@ -190,9 +220,16 @@ def _cell_content(cours, styles):
             )
 
     if cours.groupe_tc:
-        parts.append(
-            f"<font color='#c45c26' size='8'><b>Tronc commun</b></font>"
-        )
+        autres = _tc_autres_filieres(cours, filiere_id)
+        if autres:
+            liste = escape(", ".join(autres))
+            parts.append(
+                f"<font color='#c45c26' size='8'><b>TC avec</b> {liste}</font>"
+            )
+        else:
+            parts.append(
+                f"<font color='#c45c26' size='8'><b>Tronc commun</b></font>"
+            )
 
     return Paragraph("<br/>".join(parts), styles["cell"])
 
@@ -238,8 +275,9 @@ def _draw_page(canvas, doc, meta):
     canvas.setFillColor(CREAM)
     canvas.setFont(FONT_BODY_BOLD, 9)
     etab = meta.get("etablissement") or ""
-    right = f"{etab}  ·  Emploi du temps" if etab else "Emploi du temps"
-    canvas.drawRightString(width - 1.2 * cm, height - 0.7 * cm, right)
+    type_cours = meta.get("type_cours") or ""
+    bits = [b for b in (etab, type_cours, "Emploi du temps") if b]
+    canvas.drawRightString(width - 1.2 * cm, height - 0.7 * cm, "  ·  ".join(bits))
     canvas.setFont(FONT_BODY, 8)
     canvas.setFillColor(colors.HexColor("#d7e8df"))
     canvas.drawRightString(
@@ -248,19 +286,25 @@ def _draw_page(canvas, doc, meta):
         f"Année {meta.get('annee_univ', ANNEE_COURANTE)}",
     )
 
-    # Pied de page
+    # Pied de page (génération)
     canvas.setStrokeColor(LINE)
     canvas.setLineWidth(0.6)
-    canvas.line(1.2 * cm, 1.0 * cm, width - 1.2 * cm, 1.0 * cm)
+    canvas.line(1.2 * cm, 0.85 * cm, width - 1.2 * cm, 0.85 * cm)
     canvas.setFillColor(MUTED)
-    canvas.setFont(FONT_BODY, 8)
+    canvas.setFont(FONT_BODY, 7.5)
     generated = datetime.now().strftime("%d/%m/%Y à %H:%M")
-    canvas.drawString(1.2 * cm, 0.55 * cm, f"Généré le {generated} · GestionCours")
-    canvas.drawRightString(width - 1.2 * cm, 0.55 * cm, f"Page {doc.page}")
+    canvas.drawString(1.2 * cm, 0.45 * cm, f"Généré le {generated} · GestionCours")
+    canvas.drawRightString(width - 1.2 * cm, 0.45 * cm, f"Page {doc.page}")
     canvas.restoreState()
 
 
-def export_pour_filiere(filiere_id, date_lundi, output_path, logo_path=None):
+def export_pour_filiere(
+    filiere_id,
+    date_lundi,
+    output_path,
+    logo_path=None,
+    type_cours=None,
+):
     filiere = get_filiere_by_id(filiere_id)
     if not filiere:
         return False
@@ -273,10 +317,12 @@ def export_pour_filiere(filiere_id, date_lundi, output_path, logo_path=None):
     if parent:
         os.makedirs(parent, exist_ok=True)
 
+    type_cours = (type_cours or "").strip() or None
     meta = {
         "logo_path": logo_path,
         "etablissement": getattr(filiere, "etablissement", None) or "",
         "annee_univ": ANNEE_COURANTE,
+        "type_cours": type_cours or "",
     }
 
     doc = SimpleDocTemplate(
@@ -285,7 +331,7 @@ def export_pour_filiere(filiere_id, date_lundi, output_path, logo_path=None):
         leftMargin=1.2 * cm,
         rightMargin=1.2 * cm,
         topMargin=2.1 * cm,
-        bottomMargin=1.5 * cm,
+        bottomMargin=1.4 * cm,
         title=f"EDT {filiere.annee} {filiere.nom}",
         author="GestionCours",
     )
@@ -301,13 +347,16 @@ def export_pour_filiere(filiere_id, date_lundi, output_path, logo_path=None):
             styles["subtitle"],
         )
     )
-    meta_bits = [f"Année universitaire {ANNEE_COURANTE}"]
+    meta_bits = []
+    if meta["etablissement"]:
+        meta_bits.append(escape(meta["etablissement"]))
+    if type_cours:
+        meta_bits.append(f"Type · {escape(type_cours)}")
+    meta_bits.append(f"Année universitaire {ANNEE_COURANTE}")
     if effectif:
         meta_bits.append(f"Effectif · {effectif}")
-    if meta["etablissement"]:
-        meta_bits.insert(0, escape(meta["etablissement"]))
     elements.append(Paragraph("  ·  ".join(meta_bits), styles["meta"]))
-    elements.append(Spacer(1, 0.25 * cm))
+    elements.append(Spacer(1, 0.2 * cm))
 
     header = [Paragraph("Créneau", styles["day"])] + [
         Paragraph(jour, styles["day"]) for jour in JOURS
@@ -315,13 +364,12 @@ def export_pour_filiere(filiere_id, date_lundi, output_path, logo_path=None):
     data = [header]
 
     for i, label in enumerate(CRENEAUX_LABELS):
-        # Labels plus compacts : "Matin" + horaires
         creneau_id, debut, fin = CRENEAUX[i]
         slot_label = f"{creneau_id}<br/><font size='7' color='#6a7d74'>{debut[:-3]}–{fin[:-3]}</font>"
         row = [Paragraph(slot_label, styles["slot"])]
         for jour in JOURS:
             cours = get_cours(filiere_id, date_lundi, jour, creneau_id)
-            row.append(_cell_content(cours, styles))
+            row.append(_cell_content(cours, styles, filiere_id=filiere_id))
         data.append(row)
 
     page_width = landscape(A4)[0]
@@ -334,47 +382,63 @@ def export_pour_filiere(filiere_id, date_lundi, output_path, logo_path=None):
     table.setStyle(
         TableStyle(
             [
-                # En-tête jours
                 ("BACKGROUND", (0, 0), (-1, 0), BRAND),
                 ("TEXTCOLOR", (0, 0), (-1, 0), CREAM),
                 ("FONTNAME", (0, 0), (-1, 0), FONT_BODY_BOLD),
                 ("FONTSIZE", (0, 0), (-1, 0), 10),
-                # Colonne créneaux
                 ("BACKGROUND", (0, 1), (0, -1), PARCHMENT),
-                # Corps
                 ("BACKGROUND", (1, 1), (-1, -1), CREAM),
                 ("ROWBACKGROUNDS", (1, 1), (-1, -1), [CREAM, colors.HexColor("#f7f3ea")]),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("GRID", (0, 0), (-1, -1), 0.6, LINE),
                 ("BOX", (0, 0), (-1, -1), 1.2, BRAND_SOFT),
-                ("TOPPADDING", (0, 0), (-1, -1), 10),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, 0), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, 0), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 7),
             ]
         )
     )
     elements.append(table)
 
     # Légende
-    elements.append(Spacer(1, 0.45 * cm))
-    legend = Paragraph(
-        f"<font color='#0f4c3a'><b>Matière</b></font>  ·  "
-        f"<font color='#3d524a'>Enseignant</font>  ·  "
-        f"<font color='#6a7d74'>Salle</font>  ·  "
-        f"<font color='#c45c26'><b>Tronc commun</b></font>",
-        ParagraphStyle(
-            name="Legend",
-            fontName=FONT_BODY,
-            fontSize=8,
-            textColor=MUTED,
-            alignment=TA_CENTER,
-        ),
+    elements.append(Spacer(1, 0.35 * cm))
+    elements.append(
+        Paragraph(
+            f"<font color='#0f4c3a'><b>Matière</b></font>  ·  "
+            f"<font color='#3d524a'>Enseignant</font>  ·  "
+            f"<font color='#6a7d74'>Salle</font>  ·  "
+            f"<font color='#c45c26'><b>TC avec [filières]</b></font>",
+            ParagraphStyle(
+                name="Legend",
+                fontName=FONT_BODY,
+                fontSize=8,
+                textColor=MUTED,
+                alignment=TA_CENTER,
+            ),
+        )
     )
-    elements.append(legend)
+
+    # Notes réglementaires / pratiques
+    elements.append(Spacer(1, 0.35 * cm))
+    note_style = ParagraphStyle(
+        name="ExportNotes",
+        fontName=FONT_BODY,
+        fontSize=8,
+        textColor=INK_SOFT,
+        leading=11,
+        alignment=TA_CENTER,
+        leftIndent=0.5 * cm,
+        rightIndent=0.5 * cm,
+    )
+    elements.append(
+        Paragraph(f"<b>{escape(EXPORT_NOTES[0])}</b>", note_style)
+    )
+    elements.append(Spacer(1, 0.12 * cm))
+    elements.append(Paragraph(escape(EXPORT_NOTES[1]), note_style))
 
     def _on_page(canvas, doc_):
         _draw_page(canvas, doc_, meta)
@@ -388,6 +452,7 @@ def export_all_filieres(
     annee_univ=ANNEE_COURANTE,
     logo_path=None,
     etablissement=None,
+    type_cours=None,
 ):
     from database import get_filieres
 
@@ -405,7 +470,9 @@ def export_all_filieres(
     for f in filieres:
         pdf_name = _safe_filename(f"{f.annee}_{f.nom}.pdf")
         pdf_path = os.path.join(semaine_dir, pdf_name)
-        ok = export_pour_filiere(f.id, date_lundi, pdf_path, logo_path)
+        ok = export_pour_filiere(
+            f.id, date_lundi, pdf_path, logo_path, type_cours=type_cours
+        )
         resultats.append((f, ok, pdf_path if ok else None))
 
     return resultats
@@ -416,6 +483,7 @@ def export_une_filiere(
     date_lundi,
     annee_univ=ANNEE_COURANTE,
     logo_path=None,
+    type_cours=None,
 ):
     logo_path = _default_logo(logo_path)
     filiere = get_filiere_by_id(filiere_id)
@@ -426,7 +494,9 @@ def export_une_filiere(
     os.makedirs(semaine_dir, exist_ok=True)
     pdf_name = _safe_filename(f"{filiere.annee}_{filiere.nom}.pdf")
     pdf_path = os.path.join(semaine_dir, pdf_name)
-    ok = export_pour_filiere(filiere_id, date_lundi, pdf_path, logo_path)
+    ok = export_pour_filiere(
+        filiere_id, date_lundi, pdf_path, logo_path, type_cours=type_cours
+    )
     return pdf_path if ok else None
 
 
@@ -435,6 +505,7 @@ def export_all_filieres_zip(
     annee_univ=ANNEE_COURANTE,
     logo_path=None,
     etablissement=None,
+    type_cours=None,
 ):
     """Génère tous les PDF puis un ZIP téléchargeable."""
     resultats = export_all_filieres(
@@ -442,6 +513,7 @@ def export_all_filieres_zip(
         annee_univ=annee_univ,
         logo_path=logo_path,
         etablissement=etablissement,
+        type_cours=type_cours,
     )
     if not resultats:
         return None, []

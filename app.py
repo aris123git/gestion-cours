@@ -413,18 +413,19 @@ def api_export_pdf():
     mode = data.get("mode", "all")  # all | one | zip
     filiere_id = _as_int(data.get("filiere_id"))
     etablissement = data.get("etablissement") or None
+    type_cours = (data.get("type_cours") or "").strip() or None
 
     if mode == "one":
         if not filiere_id:
             return jsonify({"error": "filiere_id requis"}), 400
-        path = export_une_filiere(filiere_id, date_lundi)
+        path = export_une_filiere(filiere_id, date_lundi, type_cours=type_cours)
         if not path:
             return jsonify({"error": "Export échoué"}), 500
         return send_file(path, as_attachment=True, download_name=os.path.basename(path))
 
     if mode == "zip" or data.get("as_zip"):
         zip_path, resultats = export_all_filieres_zip(
-            date_lundi, etablissement=etablissement
+            date_lundi, etablissement=etablissement, type_cours=type_cours
         )
         if not zip_path:
             return jsonify({"error": "Aucun PDF à exporter"}), 404
@@ -435,7 +436,9 @@ def api_export_pdf():
             mimetype="application/zip",
         )
 
-    resultats = export_all_filieres(date_lundi, etablissement=etablissement)
+    resultats = export_all_filieres(
+        date_lundi, etablissement=etablissement, type_cours=type_cours
+    )
     nb_ok = sum(1 for r in resultats if r[1])
     return jsonify({
         "ok": True,

@@ -603,6 +603,7 @@ async function exportPdf(mode) {
     mode: mode === "all" ? "zip" : mode,
     date_lundi: state.dateLundi,
     etablissement: $("#sel-etab")?.value || null,
+    type_cours: $("#sel-type")?.value || null,
   };
   if (mode === "one") {
     payload.filiere_id = state.filiereId;
