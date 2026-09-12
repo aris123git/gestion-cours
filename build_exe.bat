@@ -2,8 +2,8 @@
 setlocal
 cd /d "%~dp0"
 
-echo === GestionCours : build Windows .exe ===
-python -m pip install -r requirements.txt pyinstaller
+echo === GestionCours : build Windows .exe (PySide6 bureau) ===
+python -m pip install -r requirements.txt
 if errorlevel 1 (
   echo pip install failed
   pause
@@ -22,7 +22,6 @@ if errorlevel 1 (
 
 echo.
 echo OK : dist\GestionCours.exe
-echo Double-cliquez : le navigateur s'ouvre quand le serveur est pret.
-echo La petite fenetre se minimise toute seule — restaurez-la pour Quitter.
+echo Fenetre bureau native (comme Gestion_app) — PAS de navigateur.
 echo.
 pause

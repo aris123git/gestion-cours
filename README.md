@@ -1,20 +1,21 @@
 # GestionCours
 
-Application de gestion des emplois du temps universitaires (IST / UBS).
+Application locale de gestion des emplois du temps universitaires (IST / UBS).
 
-## Démarrage (interface web moderne)
+## Démarrage (bureau natif PySide6 — recommandé)
+
+Comme **Gestion_app** : fenêtre Windows native, **sans navigateur**.
 
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 
-Ouvrez ensuite [http://127.0.0.1:5000](http://127.0.0.1:5000).
-
-## Ancienne interface bureau (Tkinter)
+## Autres interfaces
 
 ```bash
-python main.py --desktop
+python main.py --web     # Flask + navigateur local
+python main.py --tk      # ancienne UI Tkinter
 ```
 
 ## Tests
@@ -26,45 +27,28 @@ pytest -v
 
 ## Créer un `.exe` Windows
 
-À faire **sur Windows**, dans le dossier du projet (branche avec `requirements.txt`, `templates/`, `static/`) :
-
 ```bat
 build_exe.bat
 ```
 
-Ou manuellement :
+Résultat : `dist\GestionCours.exe` — **fenêtre bureau** (PySide6), pas de navigateur.
 
-```bat
-pip install -r requirements.txt pyinstaller
-pyinstaller GestionCours.spec
-```
-
-Puis lancez `dist\GestionCours.exe` :
-- le navigateur s’ouvre sur http://127.0.0.1:5000 (pas de terminal noir)
-- une petite fenêtre « GestionCours est en cours » reste ouverte — fermez-la pour quitter
-
-Si ça échoue : le fichier `gestioncours-error.log` à côté du `.exe`.
-
-> Le `.exe` ne peut pas être généré depuis Linux/macOS. Windows Defender peut parfois bloquer un nouvel exécutable PyInstaller — autorisez-le si demandé.
+> À builder sur Windows. Windows Defender peut demander une autorisation au premier lancement.
 
 ## Fonctionnalités
 
 - Emploi du temps hebdomadaire par filière / année / université
 - Édition des cours (matière, enseignant, tronc commun)
 - Allocation automatique des salles selon les effectifs
-- Export PDF soigné (une filière) ou archive ZIP (toutes, filtrée par université)
-- Design PDF aligné sur l'interface (vert campus, terracotta, polices Syne/Manrope)
-- Copie d'une semaine vers une autre
-- Gestion des salles, effectifs et filières
-- Recherche matière / enseignant
-- Détection des conflits d'enseignants
-- Raccourcis clavier (`←` `→` semaine, `T` aujourd'hui, `/` recherche)
+- Export PDF (type Jour/Soir/En ligne, filières TC, notes BOA)
+- Copie d'une semaine, conflits enseignants
+- Gestion salles / effectifs / filières
 
 ## Structure
 
-- `app.py` — API Flask + pages web
-- `interface.py` — UI Tkinter (optionnelle)
-- `database.py` — accès SQLite
+- `desktop/` — UI PySide6 (bureau)
+- `app.py` / `static/` / `templates/` — UI web optionnelle
+- `interface.py` — UI Tkinter optionnelle
+- `database.py` — SQLite
 - `allocation.py` — allocation des salles
-- `export_pdf.py` — génération PDF
-- `static/` / `templates/` — frontend moderne
+- `export_pdf.py` — PDF

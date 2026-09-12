@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Build on Windows:
-#   pip install -r requirements.txt pyinstaller
-#   pyinstaller GestionCours.spec
-# Result: dist\GestionCours.exe
+#   pip install -r requirements.txt
+#   build_exe.bat
+# Result: dist\GestionCours.exe  (fenêtre bureau PySide6, pas de navigateur)
 
 block_cipher = None
 
@@ -13,14 +13,19 @@ datas = [
 ]
 
 hiddenimports = [
+    'PySide6',
+    'PySide6.QtCore',
+    'PySide6.QtGui',
+    'PySide6.QtWidgets',
+    'desktop',
+    'desktop.theme',
+    'desktop.main_window',
+    'desktop.dialogs',
     'flask',
     'jinja2',
-    'jinja2.ext',
     'reportlab',
     'reportlab.pdfbase.ttfonts',
-    'reportlab.graphics',
     'sqlite3',
-    'webbrowser',
 ]
 
 a = Analysis(
@@ -52,10 +57,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,  # UPX often breaks / triggers antivirus on Windows
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # no black terminal — browser + small status window
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
